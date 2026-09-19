@@ -1,69 +1,17 @@
-# Prerequisites
-*.d
+# Rust
+/target
+**/*.rs.bk
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# Frontend tooling (once the Tauri shell exists)
+node_modules/
+dist/
 
-# Precompiled Headers
-*.gch
-*.pch
+# Real task data must never land in this public repo
+*.automerge
 
-# Linker files
-*.ilk
+# Private notes for local Claude sessions
+CLAUDE.local.md
 
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# Build directories
-build/
-Build/
-build-*/
-
-# CMake generated files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-install_manifest.txt
-compile_commands.json
-
-# Temporary files
-*.tmp
-*.log
-*.bak
+# OS / editor noise
+.DS_Store
 *.swp
-
-# vcpkg
-vcpkg_installed/
-
-# debug information files
-*.dwo
-
-# test output & cache
-Testing/
-.cache/
