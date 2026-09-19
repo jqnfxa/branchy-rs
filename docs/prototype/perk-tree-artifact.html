@@ -1,0 +1,748 @@
+<title>Talent Tree</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Manrope:wght@400;500;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #10131c;
+    --bg-elevated: #171c2b;
+    --bg-card: #1c2233;
+    --line: #2a3050;
+    --line-soft: #232842;
+    --text: #e9ebf5;
+    --text-dim: #8991ac;
+    --text-faint: #5c6480;
+    --hard: #4fd1c5;
+    --hard-dim: #2a5f5a;
+    --social: #ef8093;
+    --social-dim: #6b3d47;
+    --health: #8fd17c;
+    --health-dim: #40532f;
+    --other: #eab64d;
+    --other-dim: #6b5327;
+    --locked: #363c56;
+    --danger: #e2666f;
+    --font-display: "Chakra Petch", "Segoe UI", sans-serif;
+    --font-body: "Manrope", "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(79,209,197,0.07), transparent 40%),
+      radial-gradient(circle at 85% 20%, rgba(234,182,77,0.06), transparent 45%);
+    color: var(--text);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 20px 16px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px 20px;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark { font-size: 26px; }
+  .brand h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+    margin: 0;
+  }
+
+  .overall-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-right: auto;
+  }
+  #overallCount {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .stat-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  button { font-family: var(--font-body); }
+
+  .btn-add {
+    background: linear-gradient(135deg, var(--hard), #3aa89d);
+    color: #0a1512;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-weight: 800;
+    font-size: 13.5px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(79,209,197,0.25);
+  }
+  .btn-add:hover { filter: brightness(1.08); }
+
+  .branch {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: 16px;
+    padding: 16px 16px 20px;
+  }
+
+  .branch-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .branch-dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot-color) 25%, transparent);
+    background: var(--dot-color);
+    flex-shrink: 0;
+  }
+  .branch-head h2 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+  .branch-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .branch-progress .bar {
+    width: 84px;
+    height: 6px;
+    border-radius: 4px;
+    background: var(--locked);
+    overflow: hidden;
+  }
+  .branch-progress .fill {
+    height: 100%;
+    background: var(--dot-color);
+    border-radius: 4px;
+  }
+  .branch-progress .count {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tiers-scroll {
+    overflow-x: auto;
+    margin: 0 -16px;
+    padding: 4px 16px 8px;
+  }
+  .tiers {
+    position: relative;
+    display: flex;
+    gap: 46px;
+    min-height: 40px;
+    width: max-content;
+  }
+  .tier-col {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 190px;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  .connectors {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .empty-branch {
+    color: var(--text-faint);
+    font-size: 13px;
+    padding: 10px 2px;
+  }
+  .empty-branch button {
+    background: none;
+    border: 1px dashed var(--line);
+    color: var(--text-dim);
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-left: 8px;
+    cursor: pointer;
+    font-size: 12.5px;
+  }
+
+  .node-card {
+    background: var(--bg-card);
+    border: 1.5px solid var(--locked);
+    border-radius: 11px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+    position: relative;
+  }
+  .node-card:hover { transform: translateY(-2px); }
+  .node-card .name {
+    font-family: var(--font-display);
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.3;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .node-card .icon { flex-shrink: 0; font-size: 12px; margin-top: 1px; }
+
+  .node-card.status-locked { opacity: 0.55; }
+  .node-card.status-locked .name { color: var(--text-dim); }
+
+  .node-card.status-available {
+    border-color: var(--dot-color);
+    box-shadow: 0 0 0 1px var(--dot-color), 0 0 16px -4px var(--dot-color);
+    animation: pulse-available 2.4s ease-in-out infinite;
+  }
+
+  .node-card.status-unlocked {
+    border-color: var(--dot-color);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--dot-color) 16%, var(--bg-card)), var(--bg-card));
+  }
+  .node-card.status-unlocked .name { color: var(--text); }
+
+  @keyframes pulse-available {
+    0%, 100% { box-shadow: 0 0 0 1px var(--dot-color), 0 0 10px -4px var(--dot-color); }
+    50% { box-shadow: 0 0 0 1px var(--dot-color), 0 0 20px -2px var(--dot-color); }
+  }
+  @keyframes unlock-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .node-card.status-available { animation: none; }
+    .node-card { transition: none; }
+  }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(6,8,14,0.6);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    z-index: 20;
+  }
+  .modal {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: 16px;
+    padding: 22px;
+    width: 100%;
+    max-width: 440px;
+    max-height: 86vh;
+    overflow-y: auto;
+  }
+  .modal h3 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    margin: 0 0 4px;
+  }
+  .modal .modal-branch {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--dot-color, var(--text-dim));
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .modal p.desc {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-dim);
+    margin: 0 0 16px;
+  }
+  .modal .prereq-list { list-style: none; padding: 0; margin: 0 0 18px; display: flex; flex-direction: column; gap: 6px; }
+  .modal .prereq-list li { font-size: 12.5px; display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
+  .modal .prereq-list li.met { color: var(--health); }
+  .modal .prereq-list li.unmet { color: var(--danger); }
+
+  .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .btn {
+    border: none;
+    border-radius: 9px;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--dot-color, var(--hard)); color: #0a1512; }
+  .btn-ghost { background: var(--bg-card); color: var(--text); border: 1px solid var(--line); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  label { display: block; font-size: 12px; color: var(--text-dim); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  label:first-of-type { margin-top: 0; }
+  input[type="text"], select, textarea {
+    width: 100%;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 9px 10px;
+    font-family: var(--font-body);
+    font-size: 13.5px;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  .prereq-picker { max-height: 140px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .prereq-picker label.check {
+    display: flex; align-items: center; gap: 8px;
+    text-transform: none; letter-spacing: 0; margin: 0; font-size: 12.5px; color: var(--text);
+  }
+
+  .toast {
+    position: fixed;
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 9px;
+    font-size: 13px;
+    z-index: 30;
+  }
+
+  .notice {
+    background: var(--bg-elevated);
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  [hidden] { display: none !important; }
+</style>
+
+<div id="app">
+  <div class="topbar">
+    <div class="brand"><span class="brand-mark">🌳</span><h1>Talent Tree</h1></div>
+    <div class="overall-stat">
+      <span id="overallCount">0/0</span>
+      <span class="stat-label">perks unlocked</span>
+    </div>
+    <button class="btn-add" id="openAddBtn" type="button">+ Add perk</button>
+  </div>
+
+  <div id="dbNotice" class="notice" hidden></div>
+
+  <main id="branches"></main>
+</div>
+
+<div class="modal-backdrop" id="detailBackdrop" hidden>
+  <div class="modal" id="detailModal"></div>
+</div>
+
+<div class="modal-backdrop" id="addBackdrop" hidden>
+  <div class="modal">
+    <h3>New perk</h3>
+    <form id="addForm">
+      <label for="fName">Name</label>
+      <input type="text" id="fName" required maxlength="60">
+
+      <label for="fBranch">Branch</label>
+      <select id="fBranch">
+        <option value="hard-skills">Hard skills</option>
+        <option value="social">Social skills</option>
+        <option value="health">Health</option>
+        <option value="other">Other</option>
+      </select>
+
+      <label for="fDesc">Description</label>
+      <textarea id="fDesc" maxlength="400" placeholder="What does unlocking this actually mean?"></textarea>
+
+      <label>Prerequisites (must be unlocked first)</label>
+      <div class="prereq-picker" id="fPrereqs"></div>
+
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">Add perk</button>
+        <button type="button" class="btn btn-ghost" id="cancelAdd">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var BRANCHES = [
+    { id: "hard-skills", label: "Hard Skills", color: "var(--hard)" },
+    { id: "social", label: "Social Skills", color: "var(--social)" },
+    { id: "health", label: "Health", color: "var(--health)" },
+    { id: "other", label: "Other", color: "var(--other)" }
+  ];
+  var branchColor = {};
+  BRANCHES.forEach(function (b) { branchColor[b.id] = b.color; });
+
+  var db = null;
+  var nodes = [];
+  var nodesById = {};
+  var offline = false;
+
+  var branchesEl = document.getElementById("branches");
+  var overallCountEl = document.getElementById("overallCount");
+  var dbNotice = document.getElementById("dbNotice");
+  var detailBackdrop = document.getElementById("detailBackdrop");
+  var detailModal = document.getElementById("detailModal");
+  var addBackdrop = document.getElementById("addBackdrop");
+  var addForm = document.getElementById("addForm");
+  var fPrereqs = document.getElementById("fPrereqs");
+
+  function showToast(msg) {
+    var t = document.createElement("div");
+    t.className = "toast";
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+
+  function computeTiers() {
+    var tier = {};
+    var visiting = {};
+    function tierOf(id) {
+      if (tier[id] !== undefined) return tier[id];
+      if (visiting[id]) return 0;
+      visiting[id] = true;
+      var n = nodesById[id];
+      var prereqs = (n && n.prerequisites) || [];
+      var max = -1;
+      prereqs.forEach(function (pid) {
+        if (nodesById[pid]) max = Math.max(max, tierOf(pid));
+      });
+      tier[id] = max + 1;
+      visiting[id] = false;
+      return tier[id];
+    }
+    nodes.forEach(function (n) { tierOf(n.id); });
+    return tier;
+  }
+
+  function status(node) {
+    if (node.unlocked) return "unlocked";
+    var prereqs = node.prerequisites || [];
+    var met = prereqs.every(function (pid) {
+      var p = nodesById[pid];
+      return !p || p.unlocked;
+    });
+    return met ? "available" : "locked";
+  }
+
+  function render() {
+    nodesById = {};
+    nodes.forEach(function (n) { nodesById[n.id] = n; });
+    var tiers = computeTiers();
+
+    var totalUnlocked = nodes.filter(function (n) { return n.unlocked; }).length;
+    overallCountEl.textContent = totalUnlocked + "/" + nodes.length;
+
+    branchesEl.innerHTML = "";
+    BRANCHES.forEach(function (branch) {
+      var branchNodes = nodes.filter(function (n) { return n.branch === branch.id; });
+      var section = document.createElement("section");
+      section.className = "branch";
+      section.style.setProperty("--dot-color", branch.color);
+
+      var head = document.createElement("div");
+      head.className = "branch-head";
+      var unlockedCount = branchNodes.filter(function (n) { return n.unlocked; }).length;
+      var pct = branchNodes.length ? Math.round((unlockedCount / branchNodes.length) * 100) : 0;
+      head.innerHTML =
+        '<span class="branch-dot"></span>' +
+        "<h2>" + branch.label + "</h2>" +
+        '<div class="branch-progress"><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="count">' + unlockedCount + "/" + branchNodes.length + "</span></div>";
+      section.appendChild(head);
+
+      if (!branchNodes.length) {
+        var empty = document.createElement("div");
+        empty.className = "empty-branch";
+        empty.textContent = "No perks here yet.";
+        var addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.textContent = "+ add the first one";
+        addBtn.addEventListener("click", function () { openAddModal(branch.id); });
+        empty.appendChild(addBtn);
+        section.appendChild(empty);
+        branchesEl.appendChild(section);
+        return;
+      }
+
+      var byTier = {};
+      branchNodes.forEach(function (n) {
+        var t = tiers[n.id] || 0;
+        (byTier[t] = byTier[t] || []).push(n);
+      });
+      var tierKeys = Object.keys(byTier).map(Number).sort(function (a, b) { return a - b; });
+
+      var scroll = document.createElement("div");
+      scroll.className = "tiers-scroll";
+      var tiersEl = document.createElement("div");
+      tiersEl.className = "tiers";
+
+      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "connectors");
+      tiersEl.appendChild(svg);
+
+      tierKeys.forEach(function (tk) {
+        var col = document.createElement("div");
+        col.className = "tier-col";
+        byTier[tk].forEach(function (n) {
+          col.appendChild(renderCard(n, branch));
+        });
+        tiersEl.appendChild(col);
+      });
+
+      scroll.appendChild(tiersEl);
+      section.appendChild(scroll);
+      branchesEl.appendChild(section);
+
+      requestAnimationFrame(function () { drawConnectors(svg, tiersEl, branchNodes); });
+    });
+  }
+
+  function renderCard(node, branch) {
+    var card = document.createElement("div");
+    var st = status(node);
+    card.className = "node-card status-" + st;
+    card.style.setProperty("--dot-color", branch.color);
+    card.dataset.id = node.id;
+    var icon = st === "unlocked" ? "✓" : (st === "available" ? "◆" : "🔒");
+    card.innerHTML = '<div class="name"><span class="icon">' + icon + "</span>" + escapeHtml(node.name) + "</div>";
+    card.addEventListener("click", function () { openDetail(node.id); });
+    return card;
+  }
+
+  function drawConnectors(svg, container, branchNodes) {
+    var rect = container.getBoundingClientRect();
+    svg.setAttribute("width", container.scrollWidth);
+    svg.setAttribute("height", container.scrollHeight);
+    svg.innerHTML = "";
+    var accent = getComputedStyle(container.parentElement.parentElement).getPropertyValue("--dot-color").trim();
+    branchNodes.forEach(function (n) {
+      var toEl = container.querySelector('[data-id="' + cssEscape(n.id) + '"]');
+      if (!toEl) return;
+      (n.prerequisites || []).forEach(function (pid) {
+        var fromEl = container.querySelector('[data-id="' + cssEscape(pid) + '"]');
+        if (!fromEl) return;
+        var fr = fromEl.getBoundingClientRect();
+        var tr = toEl.getBoundingClientRect();
+        var x1 = fr.right - rect.left, y1 = fr.top + fr.height / 2 - rect.top;
+        var x2 = tr.left - rect.left, y2 = tr.top + tr.height / 2 - rect.top;
+        var mx = (x1 + x2) / 2;
+        var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", "M " + x1 + " " + y1 + " C " + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2);
+        var unlocked = nodesById[pid] && nodesById[pid].unlocked;
+        path.setAttribute("stroke", unlocked ? (accent || "#4fd1c5") : "#363c56");
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("fill", "none");
+        svg.appendChild(path);
+      });
+    });
+  }
+
+  function cssEscape(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, "\\$&"); }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function openDetail(id) {
+    var node = nodesById[id];
+    if (!node) return;
+    var branch = BRANCHES.find(function (b) { return b.id === node.branch; });
+    var st = status(node);
+    var prereqs = node.prerequisites || [];
+
+    var prereqHtml = prereqs.length
+      ? '<ul class="prereq-list">' + prereqs.map(function (pid) {
+          var p = nodesById[pid];
+          var met = !p || p.unlocked;
+          return '<li class="' + (met ? "met" : "unmet") + '">' + (met ? "✓" : "✕") + " " + escapeHtml(p ? p.name : "(removed)") + "</li>";
+        }).join("") + "</ul>"
+      : '<p class="desc" style="margin-bottom:14px">No prerequisites — available from the start.</p>';
+
+    detailModal.style.setProperty("--dot-color", branch ? branch.color : "var(--hard)");
+    detailModal.innerHTML =
+      "<h3>" + escapeHtml(node.name) + "</h3>" +
+      '<div class="modal-branch">' + (branch ? branch.label : node.branch) + "</div>" +
+      (node.description ? '<p class="desc">' + escapeHtml(node.description) + "</p>" : "") +
+      prereqHtml +
+      '<div class="modal-actions" id="detailActions"></div>';
+
+    var actions = detailModal.querySelector("#detailActions");
+
+    if (st === "available") {
+      var unlockBtn = document.createElement("button");
+      unlockBtn.className = "btn btn-primary";
+      unlockBtn.textContent = "Unlock";
+      unlockBtn.addEventListener("click", function () { toggleUnlock(node, true); });
+      actions.appendChild(unlockBtn);
+    } else if (st === "unlocked") {
+      var relockBtn = document.createElement("button");
+      relockBtn.className = "btn btn-ghost";
+      relockBtn.textContent = "Mark as not done";
+      relockBtn.addEventListener("click", function () { toggleUnlock(node, false); });
+      actions.appendChild(relockBtn);
+    } else {
+      var lockedBtn = document.createElement("button");
+      lockedBtn.className = "btn btn-primary";
+      lockedBtn.textContent = "Locked";
+      lockedBtn.disabled = true;
+      actions.appendChild(lockedBtn);
+    }
+
+    var delBtn = document.createElement("button");
+    delBtn.className = "btn btn-danger";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", function () { deleteNode(node.id); });
+    actions.appendChild(delBtn);
+
+    var closeBtn = document.createElement("button");
+    closeBtn.className = "btn btn-ghost";
+    closeBtn.type = "button";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", closeDetail);
+    actions.appendChild(closeBtn);
+
+    detailBackdrop.hidden = false;
+  }
+
+  function closeDetail() { detailBackdrop.hidden = true; }
+  detailBackdrop.addEventListener("click", function (e) { if (e.target === detailBackdrop) closeDetail(); });
+
+  function toggleUnlock(node, value) {
+    if (!db) { showToast("Sync unavailable — open this in claude.ai to save progress."); return; }
+    db.collection("nodes").doc(node.id).update({ unlocked: value }).then(function () {
+      closeDetail();
+      if (value) showToast("Unlocked: " + node.name);
+    }).catch(function (e) { showToast("Couldn't save that change (" + e.code + ")"); });
+  }
+
+  function deleteNode(id) {
+    if (!db) { showToast("Sync unavailable — open this in claude.ai to save progress."); return; }
+    var col = db.collection("nodes");
+    col.where("prerequisites", "array-contains", id).get().then(function (snap) {
+      var cleanups = snap.docs.map(function (d) {
+        var data = d.data();
+        var next = (data.prerequisites || []).filter(function (pid) { return pid !== id; });
+        return col.doc(d.id).update({ prerequisites: next });
+      });
+      return Promise.all(cleanups);
+    }).then(function () {
+      return col.doc(id).delete();
+    }).then(function () {
+      closeDetail();
+      showToast("Perk deleted");
+    }).catch(function (e) { showToast("Couldn't delete (" + e.code + ")"); });
+  }
+
+  function openAddModal(preferredBranch) {
+    addForm.reset();
+    if (preferredBranch) document.getElementById("fBranch").value = preferredBranch;
+    fPrereqs.innerHTML = nodes.length
+      ? nodes.map(function (n) {
+          return '<label class="check"><input type="checkbox" value="' + n.id + '"> ' + escapeHtml(n.name) + " (" + n.branch + ")</label>";
+        }).join("")
+      : '<span style="color:var(--text-faint);font-size:12.5px">No existing perks to depend on yet.</span>';
+    addBackdrop.hidden = false;
+  }
+  document.getElementById("openAddBtn").addEventListener("click", function () { openAddModal(null); });
+  document.getElementById("cancelAdd").addEventListener("click", function () { addBackdrop.hidden = true; });
+  addBackdrop.addEventListener("click", function (e) { if (e.target === addBackdrop) addBackdrop.hidden = true; });
+
+  addForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!db) { showToast("Sync unavailable — open this in claude.ai to save progress."); return; }
+    var name = document.getElementById("fName").value.trim();
+    if (!name) return;
+    var branch = document.getElementById("fBranch").value;
+    var description = document.getElementById("fDesc").value.trim();
+    var prerequisites = Array.prototype.slice.call(fPrereqs.querySelectorAll("input:checked")).map(function (i) { return i.value; });
+    db.collection("nodes").add({
+      name: name,
+      branch: branch,
+      description: description,
+      prerequisites: prerequisites,
+      unlocked: false
+    }).then(function () {
+      addBackdrop.hidden = true;
+      showToast("Added: " + name);
+    }).catch(function (e) { showToast("Couldn't add that (" + e.code + ")"); });
+  });
+
+  var resizeTimer;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(render, 150);
+  });
+
+  function renderOffline() {
+    offline = true;
+    dbNotice.hidden = false;
+    dbNotice.textContent = "Live sync isn't available in this preview. Open the published link in claude.ai to track and save real progress.";
+    nodes = [
+      { id: "example-1", branch: "hard-skills", name: "Example: Concurrency", unlocked: false, prerequisites: [], description: "This is example data shown because sync is unavailable right now." }
+    ];
+    render();
+  }
+
+  async function init() {
+    try {
+      var capability = await window.claude.use("db");
+      if (!capability) { renderOffline(); return; }
+      db = capability;
+      db.collection("nodes").onSnapshot(function (snap) {
+        nodes = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+        render();
+      }, function (err) {
+        showToast("Sync error (" + err.code + ")");
+      });
+    } catch (e) {
+      renderOffline();
+    }
+  }
+
+  if (!window.claude || !window.claude.use) {
+    renderOffline();
+  } else {
+    init();
+  }
+})();
+</script>
