@@ -1,15 +1,19 @@
 [package]
 name = "branchy-app"
-description = "Persistence and the view model shared by every Branchy front end"
+description = "Persistence and the view model behind Branchy's front ends. Internal glue for branchy-core; the interesting crate is that one."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+homepage.workspace = true
+authors.workspace = true
+readme = "README.md"
+keywords = ["branchy", "todo", "graph", "storage"]
+categories = ["data-structures"]
 
 [dependencies]
-branchy-core = { path = "../branchy-core" }
+branchy-core = { path = "../branchy-core", version = "0.1.0" }
 directories = "6.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"

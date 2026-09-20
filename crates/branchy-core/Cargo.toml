@@ -1,12 +1,16 @@
 [package]
 name = "branchy-core"
-description = "Dependency graph engine behind Branchy"
+description = "Dependency graph of tasks: derived status and tiers, cycle rejection and detection, deadlines that propagate, an undoable command layer and a text grammar. No dependencies."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+homepage.workspace = true
+authors.workspace = true
+readme = "README.md"
+keywords = ["graph", "dag", "todo", "dependencies", "scheduling"]
+categories = ["data-structures", "algorithms"]
 
 [lints]
 workspace = true
