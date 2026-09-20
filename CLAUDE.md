@@ -57,11 +57,20 @@ Consequences that bind every phase:
 
 Done and committed locally: workspace skeleton, rustfmt and clippy config, CI, dual license, README, design concept, commit rules, and two UI prototypes (`docs/prototype/skill-tree.html` is the current one).
 
-Phase 1 is written and passing but **nothing is committed yet**. `branchy-core` holds `id.rs`, `node.rs`, `error.rs`, `graph.rs`, `command.rs`, `parse.rs`, with 48 integration tests across `tests/graph.rs` and `tests/command.rs` plus a doctest. Zero dependencies. Clean under `clippy --all-targets -D warnings` with the workspace pedantic lints.
+**Phase 1 is done and committed.** Nothing is pushed yet.
 
-Two invariants worth not breaking: ids are never reused (a withdrawn id may already have been seen by another device), and every derived computation terminates on a cyclic graph.
+- `crates/branchy-core` — `id.rs`, `node.rs`, `error.rs`, `graph.rs`, `command.rs`, `parse.rs`. Zero dependencies.
+- `crates/branchy-cli` — the `branchy` binary. Depends on clap, serde, serde_json, directories.
+- 62 integration tests plus a doctest, all passing, clean under `clippy --all-targets -D warnings`.
 
-Still to do in phase 1: `crates/branchy-cli` (clap over the same parser, JSON on disk for now — Automerge replaces it in phase 3). `concept.md` is the developer's own untracked draft.
+Invariants worth not breaking:
+
+- Ids are never reused, including after an undone removal. A withdrawn id may already have been seen by another device.
+- Every derived computation terminates on a cyclic graph.
+- The on-disk format lives in `branchy-cli/src/store.rs`, written by hand and versioned, never derived from the core's internal layout. Phase 3 swaps its body for Automerge behind `load` and `save`.
+- Saves are written to a sibling file and renamed over the target. A half-written document is exactly what a sync tool would propagate everywhere.
+
+`concept.md` is the developer's own untracked draft.
 
 ## Open decisions
 
