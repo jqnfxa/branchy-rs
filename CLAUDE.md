@@ -58,11 +58,17 @@ Consequences that bind every phase:
 
 Done and committed locally: workspace skeleton, rustfmt and clippy config, CI, dual license, README, design concept, commit rules, and two UI prototypes (`docs/prototype/skill-tree.html` is the current one).
 
-**Phase 1 is done and committed. Phase 2 is underway.** Nothing is pushed yet.
+**Phases 1 and 2 are done and committed.** Nothing is pushed yet.
 
-The frontend in `ui/` is written and renders real data from a generated fixture. What remains for phase 2 is `src-tauri/`: the shell, its `snapshot`, `execute` and `undo` commands over `branchy-core`, and pointing `frontendDist` at `ui/`. That is blocked on the system libraries listed under open decisions.
+- `crates/branchy-core` — the graph. Zero dependencies.
+- `crates/branchy-app` — persistence and the snapshot view model.
+- `crates/branchy-cli` — the `branchy` binary.
+- `ui/` — the frontend. Plain HTML, CSS and JavaScript, no build step.
+- `src-tauri/` — the desktop shell. Its own workspace, its own CI job.
 
-No automated tests cover the frontend yet; it is checked by opening `ui/index.html` in a browser.
+Verified end to end on 2026-09-20: typed `done lock` into the window's command line, `branchy-core` applied it, the document on disk changed, and `U` put it back.
+
+No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by running the shell.
 
 - `crates/branchy-core` — `id.rs`, `node.rs`, `error.rs`, `graph.rs`, `command.rs`, `parse.rs`. Zero dependencies.
 - `crates/branchy-cli` — the `branchy` binary. Depends on clap, serde, serde_json, directories.
@@ -82,22 +88,28 @@ Invariants worth not breaking:
 - ~~Frontend technology.~~ Settled on 2026-09-20: **plain HTML, CSS and JavaScript in `ui/`, no framework and no build step.** Tauri serves the directory as it is, so there is no npm install or bundler in CI and nothing extra to make work on Android. The main view is hand-drawn SVG, where a framework's diffing buys very little. Leptos would add a wasm toolchain and a second compile target to a project whose point is shipping.
 - Whether the core crate should keep the name `branchy-core` or be named `branchy-rs`. `branchy-core` was chosen so the repo name can stay the umbrella.
 - ~~Node id type, area representation, priority representation.~~ Settled: `NodeId`/`AreaId` are newtypes over `u64` handed out by the graph, areas are one field on a node in a single graph, priority is a `u8` where higher sorts earlier.
-- **Blocked:** Tauri cannot build on this machine yet. `webkit2gtk-4.1`, `javascriptcoregtk-4.1`, `libsoup-3.0`, `libxdo`, `librsvg-2.0` and `ayatana-appindicator3-0.1` are all missing; `gtk+-3.0`, `openssl`, `cc`, `pkg-config`, `node` and `npm` are present. Needs root, so the developer runs it:
-
-  ```sh
-  sudo apt install libwebkit2gtk-4.1-dev libsoup-3.0-dev libxdo-dev \
-                   librsvg2-dev libayatana-appindicator3-dev \
-                   build-essential curl wget file libssl-dev
-  ```
-
-  Until then `src-tauri/` stays out of the workspace, because a member that cannot compile would break `cargo check --workspace` and CI.
+- ~~Tauri prerequisites on this Linux machine.~~ Installed on 2026-09-20; the shell builds and runs. `libxdo` turned out not to be needed after all.
 - Whether "done" is called "unlocked" in the UI skin.
+
+## Running the desktop shell
+
+```sh
+cd src-tauri && cargo build
+BRANCHY_FILE=/path/to/graph.json ./target/debug/branchy-desktop
+```
+
+`BRANCHY_FILE` overrides the per-user document, which is what makes the shell drivable against a fixture. `branchy snapshot > ui/dev-fixture.js` (wrapped in the assignment that file already has) refreshes the sample data the frontend falls back to when opened as a plain file.
+
+Two things that will waste an hour if rediscovered:
+
+- **Inside the VS Code snap**, the loader picks up `/snap/core20/.../libpthread.so.0` and the binary dies with `undefined symbol: __libc_pthread_init`. Launch it with a clean environment: `env -i HOME=$HOME DISPLAY=$DISPLAY XAUTHORITY=$HOME/.Xauthority PATH=/usr/bin:/bin LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu ./target/debug/branchy-desktop`. From an ordinary terminal none of this is needed.
+- **A blank window** on some Linux setups is WebKitGTK's renderer. `WEBKIT_DISABLE_DMABUF_RENDERER=1` and `WEBKIT_DISABLE_COMPOSITING_MODE=1` fix it.
 
 ## Tooling
 
 - Toolchain pinned by `rust-toolchain.toml` (stable, with rustfmt and clippy). Edition 2024, `rust-version = "1.85"`.
 - Workspace lints in the root `Cargo.toml`: `unsafe_code = "forbid"`, clippy `all` and `pedantic` at warn. Member crates opt in with `[lints] workspace = true`. When `src-tauri` is added, opt in too, and only downgrade for that crate if Tauri's generated code trips a lint.
-- CI (`.github/workflows/ci.yml`) runs fmt (Linux only), `clippy -D warnings` and tests on Ubuntu and Windows.
+- CI (`.github/workflows/ci.yml`) has two jobs on Ubuntu and Windows: one for the workspace (fmt on Linux, `clippy -D warnings`, tests) and one for `src-tauri`, which installs the Linux webview first because the shell is excluded from the workspace.
 - Check locally with:
 
 ```sh

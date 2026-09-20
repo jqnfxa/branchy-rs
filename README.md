@@ -2,7 +2,7 @@
 
 A dependency-aware, tree-alike TODO list. Break a goal into branches, unlock the next step as its prerequisites get done, and always see what is worth doing next.
 
-> Status: the core engine and a command line work. No graphical app yet.
+> Status: the engine, a command line and a desktop window all work. Sync between devices is next.
 
 ## Idea
 
@@ -30,17 +30,28 @@ cargo run --bin branchy -- undo                      # take the last change back
 
 `after` and `needs` both mean "blocked by"; `before` and `blocks` say the same edge from the other end. Tasks are named by any unambiguous part of their name. `branchy where` prints the document's location, and `--file` points at another one.
 
+## The window
+
+```sh
+cd src-tauri && cargo build && ./target/debug/branchy-desktop
+```
+
+The same graph, drawn as a skill tree. Three layouts, a queue view, search, and the same command line behind `:` or Ctrl+K.
+
 ## Stack
 
 - Rust, Cargo workspace.
 - `crates/branchy-core`: graph, status, tiers, cycle handling, the command layer and its parser. No dependencies, no UI, no filesystem.
-- `crates/branchy-cli`: the `branchy` binary, and for now the only thing that touches disk.
-- Next: a Tauri desktop shell with a web frontend, then file-based sync between devices, then Android.
+- `crates/branchy-app`: persistence, and the snapshot a user interface draws.
+- `crates/branchy-cli`: the `branchy` binary.
+- `ui/`: the frontend. Plain HTML, CSS and JavaScript, no build step.
+- `src-tauri/`: the desktop shell.
+- Next: file-based sync between devices, then Android.
 
 ## Roadmap
 
 1. ~~Core crate.~~ Done.
-2. Desktop shell.
+2. ~~Desktop shell.~~ Done.
 3. Sync between devices.
 4. Android. iOS is out of scope for now.
 

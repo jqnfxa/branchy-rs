@@ -29,3 +29,38 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+
+  # The shell is excluded from the workspace, so the job above never sees it.
+  # It needs the platform webview, which is why it is not simply a member.
+  desktop:
+    name: desktop shell (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install the Linux webview
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            libxdo-dev librsvg2-dev libayatana-appindicator3-dev \
+            build-essential curl wget file libssl-dev
+      - name: Format
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        run: cargo fmt -- --check
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Build
+        working-directory: src-tauri
+        run: cargo build
