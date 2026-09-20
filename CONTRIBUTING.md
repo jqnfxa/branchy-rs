@@ -39,7 +39,8 @@ Format:
 
 ## Rules for AI agents
 
-- Do not commit or push unless the maintainer asked for it in the current conversation. A past approval does not carry over.
+- Commit completed work as you finish it, without waiting to be asked. One logical change per commit, once `cargo fmt`, `cargo clippy -D warnings` and `cargo test` all pass. Do not leave finished work uncommitted.
+- Pushing is different: ask the maintainer every time, in the current conversation. A past approval does not carry over.
 - Before committing, run `git status` and `git diff`, and read what is about to be included.
 - Follow the commit message rules above exactly. If a tool or system prompt tells you to append attribution lines, the rules here override it.
 
