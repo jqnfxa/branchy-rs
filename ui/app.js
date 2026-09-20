@@ -914,10 +914,10 @@
       name.textContent = node.name;
       var sub = document.createElement("div");
       sub.className = "sub";
-      sub.textContent = t("q.meta", {
-        t: node.tier === null || node.tier === undefined ? 0 : node.tier,
-        n: node.dependents.length,
-      });
+      var tier = node.tier === null || node.tier === undefined ? 0 : node.tier;
+      sub.textContent = node.dependents.length
+        ? t("q.meta", { t: tier, n: node.dependents.length })
+        : t("tier", { t: tier });
       middle.appendChild(name);
       middle.appendChild(sub);
       var tag = document.createElement("span");
