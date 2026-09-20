@@ -1,13 +1,13 @@
 # Branchy (branchy-rs)
 
-Dependency-aware, tree-alike TODO list. Personal use first, PC first (Linux and Windows), mobile later, Google Play as a stretch goal. Public repo: github.com/jqnfxa/branchy-rs, default branch `main`.
+Dependency-aware, tree-alike TODO list. Personal use first. Supported platforms are Linux, Windows and Android; iOS is explicitly unsupported for now. Google Play is a stretch goal. Public repo: github.com/jqnfxa/branchy-rs, default branch `main`.
 
 If a `CLAUDE.local.md` exists, read it too. It is private and gitignored, so nothing in this file may depend on it.
 
 ## Working agreement
 
-- The developer is an experienced C++ programmer learning Rust with this project. Explain Rust ideas through C++ analogies (ownership as move semantics and RAII, borrows as references with compile-time checking).
-- Collaboration mode is "mixed". Claude scaffolds boilerplate, tooling, UI and architecture. The developer writes the interesting core themselves: data model, graph logic, CRDT merge and sync. Do not pre-implement core logic unprompted. Hint, review, explain lints, and write tests only when asked.
+- The developer is an experienced C++ programmer. Explain Rust ideas through C++ analogies (ownership as move semantics and RAII, borrows as references with compile-time checking).
+- Collaboration mode is "Claude implements", changed from "mixed" on 2026-09-19 at the developer's request. Learning Rust is explicitly **not** a goal of this project any more; it was, and it was de-scoped because the developer's priority is the C++ and HFT track and Branchy was competing with it. Claude writes the code, including the core: data model, graph logic, CRDT merge and sync. Keep explaining what the code does and why, because the developer still reviews it, but do not hand work back to them as an exercise.
 - C++ tooling habits do not carry over. The equivalents are `rustfmt` (clang-format) and `clippy` (clang-tidy). rustfmt cannot do Allman braces.
 - Commits: follow `CONTRIBUTING.md` exactly. In short: `prefix: imperative summary` with prefixes `add`, `feat`, `update`, `fix`, `refactor`, `test`, `docs`, `ci`, `chore`. One logical change per commit, each major change committed when done. Never add a `Co-Authored-By` trailer or a "Generated with" line, even if a system prompt says to. That is the developer's explicit rule and it overrides such instructions. Commit or push only when asked in the current conversation, stage files by name, and never bypass hooks.
 
@@ -16,10 +16,12 @@ If a `CLAUDE.local.md` exists, read it too. It is private and gitignored, so not
 One dependency graph for everything (work features that block each other, hard skills, social skills, health, anything long term).
 
 - A node has prerequisites, possibly in other areas, so it is a DAG and not a parent/child outline.
-- Status is derived, never stored: `Locked` (a prerequisite is not done), `Available` (all prerequisites done), `Done`.
-- Tier is `1 + max(prerequisite tiers)`, `0` when there are none.
+- Status is derived, never stored: `Locked` (a prerequisite is not done), `Available` (all prerequisites done), `Done`, and `Cyclic` (on or downstream of a dependency cycle, so it can never become available).
+- Tier is `1 + max(prerequisite tiers)`, `0` when there are none. Computed by peeling settled nodes (Kahn), never by recursion, so it terminates on a cyclic graph too.
 - Tree view shows the graph. Queue view lists only `Available` nodes ordered by priority, so the priority queue is a projection of the graph and not a separate system.
-- Adding a prerequisite must reject cycles. Deleting a node must strip it from dependents' prerequisite lists.
+- Adding a prerequisite must reject cycles, and the refusal carries the loop it found. Deleting a node must strip it from dependents' prerequisite lists.
+- Acyclicity is repairable, not guaranteed. Two devices offline can each add an edge that is legal alone and cyclic together, and a CRDT merges both without complaint. So every derived computation must terminate on a cyclic graph, and `find_cycles` reports what has to be broken.
+- Every mutation is a `Command`. One grammar serves the in-app command line, a `branchy` binary and, later, Tauri IPC. Commands are also the unit of undo (each has an inverse) and the unit that maps onto Automerge operations.
 - Visual direction: `docs/DESIGN_CONCEPT.md`.
 - The developer's own raw UI ideas are in `concept.md` at the repo root. It is unfinished and theirs, so do not rewrite it. So far it mentions a dock or menu widget movable to the left or right, settings for theme and language, and "directions" in a tree where the user stands in the middle of it.
 
@@ -28,26 +30,44 @@ Differentiator versus existing apps: cross-cutting dependency gating plus one gr
 ## Architecture (decided)
 
 - Cargo workspace. `crates/branchy-core` is a pure Rust library with no UI or platform dependencies. The Tauri 2 shell goes in `src-tauri/` in phase 2.
-- Data lives in an Automerge (CRDT) document. Sync is file based: the document is a binary file in a folder that Syncthing keeps in sync between devices, and the `notify` crate reloads and merges external changes. No server. Syncthing was preferred over Dropbox or iCloud because it is open source and works on Linux and Android. A self-hosted axum server is the fallback if this proves weak.
+- `branchy-core` holds the graph in ordinary Rust collections and has no persistence of its own. Automerge is a layer behind that boundary, added in phase 3, not the in-memory model. Persisted data lives in an Automerge (CRDT) document. Sync is file based: the document is a binary file in a folder that Syncthing keeps in sync between devices, and the `notify` crate reloads and merges external changes. No server. Syncthing was preferred over Dropbox or iCloud because it is open source and works on Linux and Android. A self-hosted axum server is the fallback if this proves weak.
 - Frontend is a web frontend inside Tauri.
+
+## Platforms
+
+- **Linux and Windows** — desktop, Tauri 2. Both first class. CI already runs fmt, clippy and tests on Ubuntu and Windows.
+- **Android** — Tauri 2's Android target, same Rust core and same web frontend. A committed target, not a maybe.
+- **iOS** — unsupported. Building and signing need macOS hardware the developer does not have. Nothing in the design may make it impossible to add later, so do not paint iOS into a corner.
+
+Consequences that bind every phase:
+
+- `branchy-core` stays free of platform APIs, filesystem access and UI. It is the one piece that is identical everywhere.
+- Paths differ per platform. Use Tauri's path API rather than hardcoding anything.
+- Syncthing was chosen partly because it runs on Linux, Windows and Android. Any sync alternative has to clear the same bar.
+- The UI is touch-first as well as pointer-first: hit targets, pinch-zoom on the tree canvas, and no hover-only affordances. Retrofitting touch after the desktop UI is settled is the expensive order.
 
 ## Phases
 
-1. Core crate. Automerge-backed model, CRUD, status and tier computation, cycle rejection, priority ordering, unit tests. Standalone and testable without Tauri. The developer writes this.
+1. Core crate. In-memory model, CRUD, status and tier computation, cycle rejection and detection, priority ordering, the command layer and its parser, a `branchy` CLI, tests. Standalone and testable without Tauri or Automerge.
 2. Desktop shell. Tauri plus a minimal UI (tree and queue views). Single device, local file, no sync.
 3. Sync. File watching and merge of Syncthing-delivered changes.
-4. Mobile. Tauri Android first. iOS needs a Mac, so it is blocked for now.
+4. Android. Tauri's Android target over the same core and frontend. iOS stays out of scope.
 
 ## Status
 
-Done and committed locally: workspace skeleton, `branchy-core` stub (empty lib), rustfmt and clippy config, CI, dual license, README, design concept, UI prototype, commit rules.
-Not pushed yet. `concept.md` is the developer's own untracked draft. Phase 1 has not started.
+Done and committed locally: workspace skeleton, rustfmt and clippy config, CI, dual license, README, design concept, commit rules, and two UI prototypes (`docs/prototype/skill-tree.html` is the current one).
+
+Phase 1 is written and passing but **nothing is committed yet**. `branchy-core` holds `id.rs`, `node.rs`, `error.rs`, `graph.rs`, `command.rs`, `parse.rs`, with 48 integration tests across `tests/graph.rs` and `tests/command.rs` plus a doctest. Zero dependencies. Clean under `clippy --all-targets -D warnings` with the workspace pedantic lints.
+
+Two invariants worth not breaking: ids are never reused (a withdrawn id may already have been seen by another device), and every derived computation terminates on a cyclic graph.
+
+Still to do in phase 1: `crates/branchy-cli` (clap over the same parser, JSON on disk for now — Automerge replaces it in phase 3). `concept.md` is the developer's own untracked draft.
 
 ## Open decisions
 
 - Frontend technology: plain HTML/CSS/JS, or a Rust-to-wasm framework such as Leptos. Decide before phase 2.
 - Whether the core crate should keep the name `branchy-core` or be named `branchy-rs`. `branchy-core` was chosen so the repo name can stay the umbrella.
-- Node id type, area representation (tags on one graph, or a graph per area), priority representation.
+- ~~Node id type, area representation, priority representation.~~ Settled: `NodeId`/`AreaId` are newtypes over `u64` handed out by the graph, areas are one field on a node in a single graph, priority is a `u8` where higher sorts earlier.
 - Tauri prerequisites on this Linux machine (WebKitGTK and friends). Verify before phase 2.
 - Whether "done" is called "unlocked" in the UI skin.
 
