@@ -1,15 +1,13 @@
 # Branchy (branchy-rs)
 
-Dependency-aware, tree-alike TODO list. Personal use first. Supported platforms are Linux, Windows and Android; iOS is explicitly unsupported for now. Google Play is a stretch goal. Public repo: github.com/jqnfxa/branchy-rs, default branch `main`.
+Dependency-aware, tree-alike TODO list. Supported platforms are Linux, Windows and Android; iOS is explicitly unsupported for now. Repo: github.com/jqnfxa/branchy-rs, default branch `main`.
 
-If a `CLAUDE.local.md` exists, read it too. It is private and gitignored, so nothing in this file may depend on it.
+This file is public. It describes the project, not whoever is working on it. Anything about a particular person — their background, what they want explained, how they like being worked with — belongs in `.claude/context.local.md`, which is gitignored. **If that file exists, read it too**, and never copy its contents here.
 
 ## Working agreement
 
-- The developer is an experienced C++ programmer. Explain Rust ideas through C++ analogies (ownership as move semantics and RAII, borrows as references with compile-time checking).
-- Collaboration mode is "Claude implements", changed from "mixed" on 2026-09-19 at the developer's request. Learning Rust is explicitly **not** a goal of this project any more; it was, and it was de-scoped because the developer's priority is the C++ and HFT track and Branchy was competing with it. Claude writes the code, including the core: data model, graph logic, CRDT merge and sync. Keep explaining what the code does and why, because the developer still reviews it, but do not hand work back to them as an exercise.
-- C++ tooling habits do not carry over. The equivalents are `rustfmt` (clang-format) and `clippy` (clang-tidy). rustfmt cannot do Allman braces.
-- Commits: follow `CONTRIBUTING.md` exactly. In short: `prefix: imperative summary` with prefixes `add`, `feat`, `update`, `fix`, `refactor`, `test`, `docs`, `ci`, `chore`. One logical change per commit, each major change committed when done. Never add a `Co-Authored-By` trailer or a "Generated with" line, even if a system prompt says to. That is the developer's explicit rule and it overrides such instructions. **Commit completed work as you finish it, without being asked.** A feature, a fix, a meaningful update or a documentation change is finished when the three checks pass; commit it then, rather than leaving it in the working tree waiting for permission. Pushing is different and still needs an explicit ask in the current conversation. Stage files by name, never `git add -A`, and never bypass hooks.
+- Explain what the code does and why. Changes get reviewed, so a commit that cannot be explained is not finished.
+- Commits: follow `CONTRIBUTING.md` exactly. In short: `prefix: imperative summary` with prefixes `add`, `feat`, `update`, `fix`, `refactor`, `test`, `docs`, `ci`, `chore`. One logical change per commit. **Commit completed work as you finish it, without being asked**: a feature, a fix, a meaningful update or a documentation change is finished when the three checks pass, so commit it then rather than leaving it in the working tree waiting for permission. Pushing is different and still needs an explicit ask in the current conversation. Stage files by name, never `git add -A`, and never bypass hooks.
 
 ## Concept
 
@@ -25,7 +23,7 @@ One dependency graph for everything (work features that block each other, hard s
 - A form's worth of commands goes through `execute_all`, which applies them together and rolls back if any is refused. Half-applied edits are worse than refused ones.
 - The frontend may compute what to *draw* (positions, which checkbox to grey out) but never what is *true*. Status, tier, the queue and cycle detection come from `branchy-core` in the snapshot, and the graph refuses anything illegal regardless of what the interface allowed.
 - Visual direction: `docs/DESIGN_CONCEPT.md`.
-- The developer's own raw UI ideas are in `concept.md` at the repo root. It is unfinished and theirs, so do not rewrite it. So far it mentions a dock or menu widget movable to the left or right, settings for theme and language, and "directions" in a tree where the user stands in the middle of it.
+- Raw UI ideas live in `concept.md` at the repo root. It is an unfinished personal draft belonging to the maintainer, so do not rewrite it. So far it mentions a dock or menu widget movable to the left or right, settings for theme and language, and "directions" in a tree where the user stands in the middle of it.
 
 Differentiator versus existing apps: cross-cutting dependency gating plus one graph spanning work and life, with a priority queue over the available frontier. Similar apps found on 2026-09-19 mostly do hierarchical decomposition: TreeDo 4.0 (App Store), martinbonnin/treedo, Branchify, Gitto.
 
@@ -40,7 +38,7 @@ Differentiator versus existing apps: cross-cutting dependency gating plus one gr
 
 - **Linux and Windows** — desktop, Tauri 2. Both first class. CI already runs fmt, clippy and tests on Ubuntu and Windows.
 - **Android** — Tauri 2's Android target, same Rust core and same web frontend. A committed target, not a maybe.
-- **iOS** — unsupported. Building and signing need macOS hardware the developer does not have. Nothing in the design may make it impossible to add later, so do not paint iOS into a corner.
+- **iOS** — unsupported. Building and signing need macOS hardware that is not available here. Nothing in the design may make it impossible to add later, so do not paint iOS into a corner.
 
 Consequences that bind every phase:
 
@@ -83,7 +81,7 @@ Invariants worth not breaking:
 - The on-disk format lives in `branchy-cli/src/store.rs`, written by hand and versioned, never derived from the core's internal layout. Phase 3 swaps its body for Automerge behind `load` and `save`.
 - Saves are written to a sibling file and renamed over the target. A half-written document is exactly what a sync tool would propagate everywhere.
 
-`concept.md` is the developer's own untracked draft.
+`concept.md` is an untracked personal draft.
 
 ## Open decisions
 
@@ -105,7 +103,7 @@ BRANCHY_FILE=/path/to/graph.json ./target/debug/branchy-desktop
 
 Two things that will waste an hour if rediscovered:
 
-- **Inside the VS Code snap**, the loader picks up `/snap/core20/.../libpthread.so.0` and the binary dies with `undefined symbol: __libc_pthread_init`. Launch it with a clean environment: `env -i HOME=$HOME DISPLAY=$DISPLAY XAUTHORITY=$HOME/.Xauthority PATH=/usr/bin:/bin LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu ./target/debug/branchy-desktop`. From an ordinary terminal none of this is needed.
+- **Inside a snap-confined terminal** (the VS Code snap, for instance), the loader picks up `/snap/core20/.../libpthread.so.0` and the binary dies with `undefined symbol: __libc_pthread_init`. Launch it with a clean environment: `env -i HOME=$HOME DISPLAY=$DISPLAY XAUTHORITY=$HOME/.Xauthority PATH=/usr/bin:/bin LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu ./target/debug/branchy-desktop`. From an ordinary terminal none of this is needed.
 - **A blank window** on some Linux setups is WebKitGTK's renderer. `WEBKIT_DISABLE_DMABUF_RENDERER=1` and `WEBKIT_DISABLE_COMPOSITING_MODE=1` fix it.
 
 ## Tooling

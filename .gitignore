@@ -12,7 +12,9 @@ dist/
 # Real task data must never land in this public repo
 *.automerge
 
-# Private notes for local Claude sessions
+# Private notes for local Claude sessions. CLAUDE.md is public and describes
+# the project; anything about a particular person lives here instead.
+.claude/*.local.md
 CLAUDE.local.md
 
 # OS / editor noise
