@@ -53,13 +53,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "branchy-cli"
+name = "branchy-app"
 version = "0.1.0"
 dependencies = [
  "branchy-core",
- "clap",
  "directories",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "branchy-cli"
+version = "0.1.0"
+dependencies = [
+ "branchy-app",
+ "branchy-core",
+ "clap",
  "serde_json",
 ]
 

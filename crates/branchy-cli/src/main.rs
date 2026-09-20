@@ -5,8 +5,8 @@
 //! the terminal and the in-app command line can never drift apart.
 
 mod render;
-mod snapshot;
-mod store;
+
+use branchy_app::{snapshot, store};
 
 use std::fmt::Write as _;
 use std::path::PathBuf;

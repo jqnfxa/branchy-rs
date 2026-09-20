@@ -18,7 +18,7 @@ const FORMAT_VERSION: u32 = 1;
 
 /// One stored graph.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Document {
+struct Document {
     version: u32,
     areas: Vec<AreaRecord>,
     nodes: Vec<NodeRecord>,
