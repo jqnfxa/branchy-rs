@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Branchy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <button class="iconbtn dock-toggle" id="dockToggle" aria-label="Directions">&#9776;</button>
+    <div class="brand"><span class="dot"></span>Branchy</div>
+
+    <div class="seg" id="layoutSeg" role="group" aria-label="Layout"></div>
+
+    <div class="search" id="searchWrap">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.6"></circle><path d="M10.4 10.4 L14 14" stroke-linecap="round"></path>
+      </svg>
+      <input id="q" type="text" autocomplete="off" spellcheck="false">
+      <button class="rx" id="rxBtn" aria-pressed="false" title="Regular expression">.*</button>
+    </div>
+
+    <span class="spacer"></span>
+    <span class="seg"><button id="queueBtn" aria-pressed="false"></button></span>
+    <div class="tally" id="tally"></div>
+    <button class="iconbtn" id="setBtn" aria-label="Settings">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+        <circle cx="8" cy="8" r="2.4"></circle>
+        <path d="M8 1.4v1.8M8 12.8v1.8M14.6 8h-1.8M3.2 8H1.4M12.67 3.33l-1.27 1.27M4.6 11.4l-1.27 1.27M12.67 12.67l-1.27-1.27M4.6 4.6L3.33 3.33" stroke-linecap="round"></path>
+      </svg>
+    </button>
+  </header>
+
+  <div class="banner" id="banner" hidden>
+    Sample data, read only &mdash; generated with <code>branchy snapshot</code>. Run the app itself to make changes.
+  </div>
+
+  <div class="row" id="row">
+    <aside class="dock" id="dock">
+      <div>
+        <h2><span id="lblDirections"></span> <button id="allBtn" type="button"></button></h2>
+        <div class="areas" id="areas"></div>
+      </div>
+      <div>
+        <h2 id="lblKeys"></h2>
+        <div class="hintlist" id="keyHints"></div>
+      </div>
+    </aside>
+
+    <main class="stage" id="stage">
+      <svg id="canvas" aria-label="Dependency graph"></svg>
+      <div class="loading" id="loading">loading</div>
+
+      <div class="legend" id="legend"></div>
+
+      <div class="zoom">
+        <button id="zIn" aria-label="Zoom in">+</button>
+        <button id="zOut" aria-label="Zoom out">&minus;</button>
+        <button id="zFit" aria-label="Fit">&#10530;</button>
+        <div class="lvl" id="zLvl">100%</div>
+      </div>
+
+      <aside class="queue" id="queue" hidden>
+        <div class="qhead">
+          <h2 id="qTitle"></h2>
+          <button class="xbtn" id="qClose" aria-label="Close">&times;</button>
+        </div>
+        <p id="qBlurb"></p>
+        <ul class="qlist" id="qlist"></ul>
+      </aside>
+    </main>
+
+    <aside class="inspector" id="inspector" hidden></aside>
+  </div>
+
+  <footer class="footer" id="footer"></footer>
+</div>
+
+<dialog class="settings" id="settings">
+  <div class="set-head">
+    <h2 id="setTitle"></h2>
+    <button class="xbtn" id="setClose" aria-label="Close">&times;</button>
+  </div>
+  <div class="set-body" id="setBody"></div>
+</dialog>
+
+<div class="palette" id="palette" hidden>
+  <div class="pal-box" role="dialog" aria-label="Command line">
+    <div class="pal-in">
+      <span class="prompt">:</span>
+      <input id="pal" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="pal-out" id="palOut"></div>
+    <ul class="pal-sugg" id="palSugg"></ul>
+    <div class="pal-hint" id="palHint"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="i18n.js"></script>
+<script src="layout.js"></script>
+<script src="backend.js"></script>
+<script src="dev-fixture.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
