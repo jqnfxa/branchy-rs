@@ -21,7 +21,9 @@ One dependency graph for everything (work features that block each other, hard s
 - Tree view shows the graph. Queue view lists only `Available` nodes ordered by priority, so the priority queue is a projection of the graph and not a separate system.
 - Adding a prerequisite must reject cycles, and the refusal carries the loop it found. Deleting a node must strip it from dependents' prerequisite lists.
 - Acyclicity is repairable, not guaranteed. Two devices offline can each add an edge that is legal alone and cyclic together, and a CRDT merges both without complaint. So every derived computation must terminate on a cyclic graph, and `find_cycles` reports what has to be broken.
-- Every mutation is a `Command`. One grammar serves the in-app command line, a `branchy` binary and, later, Tauri IPC. Commands are also the unit of undo (each has an inverse) and the unit that maps onto Automerge operations.
+- Every mutation is a `Command`. One grammar serves the in-app command line, the `branchy` binary and Tauri's IPC — including the editing forms, which build command lines rather than calling a second API. Commands are also the unit of undo (each has an inverse) and the unit that maps onto Automerge operations.
+- A form's worth of commands goes through `execute_all`, which applies them together and rolls back if any is refused. Half-applied edits are worse than refused ones.
+- The frontend may compute what to *draw* (positions, which checkbox to grey out) but never what is *true*. Status, tier, the queue and cycle detection come from `branchy-core` in the snapshot, and the graph refuses anything illegal regardless of what the interface allowed.
 - Visual direction: `docs/DESIGN_CONCEPT.md`.
 - The developer's own raw UI ideas are in `concept.md` at the repo root. It is unfinished and theirs, so do not rewrite it. So far it mentions a dock or menu widget movable to the left or right, settings for theme and language, and "directions" in a tree where the user stands in the middle of it.
 
@@ -66,9 +68,9 @@ Done and committed locally: workspace skeleton, rustfmt and clippy config, CI, d
 - `ui/` — the frontend. Plain HTML, CSS and JavaScript, no build step.
 - `src-tauri/` — the desktop shell. Its own workspace, its own CI job.
 
-Verified end to end on 2026-09-20: typed `done lock` into the window's command line, `branchy-core` applied it, the document on disk changed, and `U` put it back.
+Verified end to end on 2026-09-20 by driving the real window: typed `done lock` into its command line, created a task through the form, edited its priority, renamed a direction, and pressed `U` to take a change back. Each one reached the document on disk.
 
-No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by running the shell.
+No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by driving the shell. Two bugs found that way and not by any test: a shortcut key leaking into the field its own dialog had just focused, and `Enter` saving from only one of the form's inputs. Both are the kind only running the thing finds.
 
 - `crates/branchy-core` — `id.rs`, `node.rs`, `error.rs`, `graph.rs`, `command.rs`, `parse.rs`. Zero dependencies.
 - `crates/branchy-cli` — the `branchy` binary. Depends on clap, serde, serde_json, directories.
@@ -90,6 +92,7 @@ Invariants worth not breaking:
 - ~~Node id type, area representation, priority representation.~~ Settled: `NodeId`/`AreaId` are newtypes over `u64` handed out by the graph, areas are one field on a node in a single graph, priority is a `u8` where higher sorts earlier.
 - ~~Tauri prerequisites on this Linux machine.~~ Installed on 2026-09-20; the shell builds and runs. `libxdo` turned out not to be needed after all.
 - Whether "done" is called "unlocked" in the UI skin.
+- Time: due dates, recurring tasks, partial progress. `concept.md` asks for calendar planning and none of it exists. Deciding this changes the data model, so it comes before sync rather than after.
 
 ## Running the desktop shell
 
