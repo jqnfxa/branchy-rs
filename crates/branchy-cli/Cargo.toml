@@ -1,0 +1,23 @@
+[package]
+name = "branchy-cli"
+description = "Command line for Branchy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "branchy"
+path = "src/main.rs"
+
+[dependencies]
+branchy-core = { path = "../branchy-core" }
+clap = { version = "4.6.7", features = ["derive"] }
+directories = "6.0.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.151"
+
+[lints]
+workspace = true
