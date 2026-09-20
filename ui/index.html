@@ -27,6 +27,7 @@
     </div>
 
     <span class="spacer"></span>
+    <button class="btn tiny" id="newBtn"></button>
     <span class="seg"><button id="queueBtn" aria-pressed="false"></button></span>
     <div class="tally" id="tally"></div>
     <button class="iconbtn" id="setBtn" aria-label="Settings">
@@ -44,7 +45,12 @@
   <div class="row" id="row">
     <aside class="dock" id="dock">
       <div>
-        <h2><span id="lblDirections"></span> <button id="allBtn" type="button"></button></h2>
+        <h2><span id="lblDirections"></span>
+          <span style="display:flex;gap:4px">
+            <button id="manageAreas" type="button" aria-label="Manage directions">&#9998;</button>
+            <button id="allBtn" type="button"></button>
+          </span>
+        </h2>
         <div class="areas" id="areas"></div>
       </div>
       <div>
@@ -56,6 +62,14 @@
     <main class="stage" id="stage">
       <svg id="canvas" aria-label="Dependency graph"></svg>
       <div class="loading" id="loading">loading</div>
+
+      <div class="empty-state" id="emptyState" hidden>
+        <div class="inner">
+          <h2 id="emptyTitle"></h2>
+          <p id="emptyBlurb"></p>
+          <button class="btn primary" id="emptyBtn"></button>
+        </div>
+      </div>
 
       <div class="legend" id="legend"></div>
 
@@ -88,6 +102,60 @@
     <button class="xbtn" id="setClose" aria-label="Close">&times;</button>
   </div>
   <div class="set-body" id="setBody"></div>
+</dialog>
+
+<dialog class="editor" id="editor">
+  <div class="set-head">
+    <h2 id="edTitle"></h2>
+    <button class="xbtn" id="edClose" aria-label="Close">&times;</button>
+  </div>
+  <div class="ed-body">
+    <div class="field">
+      <label for="edName" id="edNameLbl"></label>
+      <input id="edName" type="text" autocomplete="off">
+    </div>
+    <div class="ed-row">
+      <div class="field">
+        <label for="edArea" id="edAreaLbl"></label>
+        <select id="edArea"></select>
+      </div>
+      <div class="field">
+        <label for="edPri" id="edPriLbl"></label>
+        <input id="edPri" type="number" min="0" max="255" step="1">
+      </div>
+    </div>
+    <div class="field">
+      <label for="edNote" id="edNoteLbl"></label>
+      <textarea id="edNote" rows="2"></textarea>
+    </div>
+    <div class="field">
+      <label id="edNeedsLbl"></label>
+      <div class="picker" id="edNeeds"></div>
+      <p class="help" id="edNeedsHelp"></p>
+    </div>
+  </div>
+  <div class="ed-foot">
+    <button class="btn danger" id="edDelete" hidden></button>
+    <span class="grow"></span>
+    <button class="btn" id="edCancel"></button>
+    <button class="btn primary" id="edSave"></button>
+  </div>
+</dialog>
+
+<dialog class="editor" id="areas-editor">
+  <div class="set-head">
+    <h2 id="arTitle"></h2>
+    <button class="xbtn" id="arClose" aria-label="Close">&times;</button>
+  </div>
+  <div class="ed-body">
+    <div class="arealist" id="arList"></div>
+    <p class="help" id="arHelp"></p>
+  </div>
+  <div class="ed-foot">
+    <button class="btn" id="arAdd"></button>
+    <span class="grow"></span>
+    <button class="btn primary" id="arDone"></button>
+  </div>
 </dialog>
 
 <div class="palette" id="palette" hidden>

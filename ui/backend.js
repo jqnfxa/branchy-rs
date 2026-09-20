@@ -21,6 +21,9 @@
       execute: function (line) {
         return invoke("execute", { line: line });
       },
+      executeAll: function (lines) {
+        return invoke("execute_all", { lines: lines });
+      },
       undo: function () {
         return invoke("undo");
       },
@@ -36,17 +39,16 @@
       snapshot: function () {
         return Promise.resolve(JSON.parse(JSON.stringify(fixture)));
       },
-      execute: function () {
-        return Promise.reject(
-          new Error("readonly:This is sample data. Changes need the app itself.")
-        );
-      },
-      undo: function () {
-        return Promise.reject(
-          new Error("readonly:This is sample data. Changes need the app itself.")
-        );
-      },
+      execute: refuse,
+      executeAll: refuse,
+      undo: refuse,
     };
+  }
+
+  function refuse() {
+    return Promise.reject(
+      new Error("readonly:This is sample data. Changes need the app itself.")
+    );
   }
 
   global.Branchy = global.Branchy || {};

@@ -197,14 +197,12 @@
 
     return backend
       .execute(line)
-      .then(function () {
-        return backend.snapshot();
-      })
-      .then(function (next) {
-        adopt(next);
+      .then(function (outcome) {
+        adopt(outcome.snapshot);
         render();
         paintChrome();
         celebrate(before);
+        if (outcome.node && byId[outcome.node]) select(outcome.node);
         return true;
       })
       .catch(function (error) {
@@ -744,6 +742,16 @@
       action.disabled = true;
     }
     body.appendChild(action);
+
+    var edit = document.createElement("button");
+    edit.className = "btn";
+    edit.type = "button";
+    edit.style.marginTop = "8px";
+    edit.style.width = "100%";
+    edit.textContent = t("ed.editTitle");
+    edit.onclick = function () { openEditor(node.id); };
+    body.appendChild(edit);
+
     inspector.appendChild(body);
   }
 
@@ -946,6 +954,7 @@
     document.getElementById("palHint").textContent = t("cmd.hint");
 
     var hints = [
+      ["new", "N"], ["ed.editTitle", "E"], ["ar.title", "A"],
       ["k.command", ":"], ["k.search", "/"], ["k.fit", "F"],
       ["k.queue", "Q"], ["k.layouts", "1 2 3"], ["k.settings", "S"],
       ["k.close", "Esc"],
@@ -982,6 +991,25 @@
       span.textContent = t(key);
       footer.appendChild(span);
     });
+
+    document.getElementById("newBtn").textContent = t("new");
+    document.getElementById("edNameLbl").textContent = t("ed.name");
+    document.getElementById("edAreaLbl").textContent = t("ed.area");
+    document.getElementById("edPriLbl").textContent = t("ed.pri");
+    document.getElementById("edNoteLbl").textContent = t("ed.note");
+    document.getElementById("edNeedsLbl").textContent = t("ed.needs");
+    document.getElementById("edNeedsHelp").textContent = t("ed.needsHelp");
+    document.getElementById("edSave").textContent = t("ed.save");
+    document.getElementById("edCancel").textContent = t("ed.cancel");
+    document.getElementById("edDelete").textContent = t("ed.delete");
+    document.getElementById("emptyTitle").textContent = t("empty.title");
+    document.getElementById("emptyBlurb").textContent = t("empty.blurb");
+    document.getElementById("emptyBtn").textContent = t("empty.btn");
+
+    // an empty canvas explains nothing, so say what a direction is for
+    var blank = document.getElementById("emptyState");
+    blank.hidden = snap.areas.length > 0;
+    document.getElementById("newBtn").disabled = false;
 
     paintLayoutSeg();
     paintTally();
@@ -1175,15 +1203,251 @@
     snap.nodes.forEach(function (node) { before[node.id] = node.status; });
     backend
       .undo()
-      .then(function () { return backend.snapshot(); })
-      .then(function (next) {
-        adopt(next);
+      .then(function (outcome) {
+        adopt(outcome.snapshot);
         render();
         paintChrome();
         celebrate(before);
         toast(t("act.undo"));
       })
       .catch(function (error) { toast(message(error), true); });
+  }
+
+
+  /* ---------- building command lines ---------- */
+
+  // Mirrors branchy_core::quote. Anything typed into a form has to survive the
+  // trip through the grammar, including quotation marks.
+  function quote(value) {
+    return '"' + String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  }
+
+  // Notes are one line: the grammar is line-based, so a newline would end the
+  // command. Collapsing them is honest; silently truncating would not be.
+  function oneLine(text) {
+    return String(text).replace(/\s*\n+\s*/g, " ").trim();
+  }
+
+  /* ---------- the task editor ---------- */
+
+  var editor, edTargetId = null;
+
+  // Which tasks cannot become prerequisites of `id`, because `id` already
+  // reaches them. Only for disabling checkboxes: the graph still refuses.
+  function wouldLoop(id) {
+    var blocked = {};
+    if (!id) return blocked;
+    blocked[id] = true;
+    var stack = [id];
+    while (stack.length) {
+      var at = stack.pop();
+      (byId[at] ? byId[at].dependents : []).forEach(function (d) {
+        if (!blocked[d]) { blocked[d] = true; stack.push(d); }
+      });
+    }
+    return blocked;
+  }
+
+  function openEditor(id) {
+    edTargetId = id || null;
+    var node = id ? byId[id] : null;
+    if (!snap.areas.length) return;
+
+    document.getElementById("edTitle").textContent =
+      t(node ? "ed.editTitle" : "ed.newTitle");
+    document.getElementById("edName").value = node ? node.name : "";
+    document.getElementById("edNote").value = node ? node.note : "";
+    document.getElementById("edPri").value = node ? node.priority : 5;
+
+    var areaSel = document.getElementById("edArea");
+    areaSel.innerHTML = "";
+    snap.areas.forEach(function (area) {
+      var option = document.createElement("option");
+      option.value = area.id;
+      option.textContent = area.name;
+      if (node ? node.area === area.id : state.focus === area.id) option.selected = true;
+      areaSel.appendChild(option);
+    });
+
+    var picker = document.getElementById("edNeeds");
+    picker.innerHTML = "";
+    var blocked = wouldLoop(id);
+    var others = snap.nodes.filter(function (other) { return other.id !== id; });
+    if (!others.length) {
+      var none = document.createElement("div");
+      none.className = "none";
+      none.textContent = t("ed.needsNone");
+      picker.appendChild(none);
+    }
+    others.forEach(function (other) {
+      var row = document.createElement("label");
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.value = other.id;
+      box.checked = !!node && node.prereqs.indexOf(other.id) !== -1;
+      if (blocked[other.id] && !box.checked) {
+        box.disabled = true;
+        row.className = "blocked";
+      }
+      var swatch = document.createElement("span");
+      swatch.className = "swatch";
+      swatch.style.background = colorOf(other.area);
+      var name = document.createElement("span");
+      name.className = "nm";
+      name.textContent = other.name;
+      row.appendChild(box);
+      row.appendChild(swatch);
+      row.appendChild(name);
+      if (blocked[other.id] && !box.checked) {
+        var why = document.createElement("span");
+        why.className = "why";
+        why.textContent = t("cycleWould");
+        row.appendChild(why);
+      }
+      picker.appendChild(row);
+    });
+
+    var remove = document.getElementById("edDelete");
+    remove.hidden = !node;
+    editor.showModal();
+    document.getElementById("edName").focus();
+  }
+
+  function chosenPrereqs() {
+    return Array.prototype.filter
+      .call(document.getElementById("edNeeds").querySelectorAll("input"), function (box) {
+        return box.checked;
+      })
+      .map(function (box) { return box.value; });
+  }
+
+  // One editing session becomes one batch, so a refusal leaves nothing behind.
+  function saveEditor() {
+    var name = document.getElementById("edName").value.trim();
+    if (!name) { document.getElementById("edName").focus(); return; }
+    var area = document.getElementById("edArea").value;
+    var note = oneLine(document.getElementById("edNote").value);
+    var priority = Math.max(0, Math.min(255, Number(document.getElementById("edPri").value) || 0));
+    var wanted = chosenPrereqs();
+    var lines = [];
+
+    if (!edTargetId) {
+      var line = "add " + quote(name) + " in " + area + " pri " + priority;
+      if (wanted.length) line += " after " + wanted.join(", ");
+      if (note) line += " note " + quote(note);
+      lines.push(line);
+    } else {
+      var node = byId[edTargetId];
+      if (node.name !== name) lines.push("rename " + edTargetId + " " + quote(name));
+      if (node.note !== note) lines.push("note " + edTargetId + " " + quote(note));
+      if (node.priority !== priority) lines.push("pri " + edTargetId + " " + priority);
+      if (node.area !== area) lines.push("move " + edTargetId + " in " + area);
+      node.prereqs.forEach(function (had) {
+        if (wanted.indexOf(had) === -1) lines.push("unlink " + edTargetId + " after " + had);
+      });
+      wanted.forEach(function (want) {
+        if (node.prereqs.indexOf(want) === -1) lines.push("link " + edTargetId + " after " + want);
+      });
+    }
+
+    if (!lines.length) { editor.close(); return; }
+    runBatch(lines).then(function (ok) { if (ok) editor.close(); });
+  }
+
+  function deleteFromEditor() {
+    var node = byId[edTargetId];
+    if (!node) return;
+    if (!window.confirm(t("ed.confirmDelete", { name: node.name }))) return;
+    runBatch(["rm " + edTargetId]).then(function (ok) {
+      if (ok) { editor.close(); select(null); }
+    });
+  }
+
+  /* ---------- the direction editor ---------- */
+
+  var areaEditor;
+
+  function openAreaEditor() {
+    var list = document.getElementById("arList");
+    list.innerHTML = "";
+    document.getElementById("arTitle").textContent = t("ar.title");
+    document.getElementById("arHelp").textContent = t("ar.help");
+    document.getElementById("arAdd").textContent = t("ar.add");
+    document.getElementById("arDone").textContent = t("ar.done");
+
+    snap.areas.forEach(function (area) {
+      var row = document.createElement("div");
+      row.className = "arearow";
+
+      var color = document.createElement("input");
+      color.type = "color";
+      color.value = /^#[0-9a-f]{6}$/i.test(area.color) ? area.color : "#8991ac";
+      color.onchange = function () {
+        runBatch(["recolor-area " + area.id + " " + color.value]);
+      };
+
+      var name = document.createElement("input");
+      name.type = "text";
+      name.value = area.name;
+      name.onchange = function () {
+        var next = name.value.trim();
+        if (!next || next === area.name) { name.value = area.name; return; }
+        runBatch(["rename-area " + area.id + " " + quote(next)]).then(function (ok) {
+          if (ok) openAreaEditor();
+        });
+      };
+
+      var count = document.createElement("span");
+      count.className = "count";
+      count.textContent = num(area.done) + "/" + num(area.total);
+
+      var remove = document.createElement("button");
+      remove.className = "btn tiny danger";
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.disabled = area.total > 0;
+      remove.onclick = function () {
+        runBatch(["rmarea " + area.id]).then(function (ok) { if (ok) openAreaEditor(); });
+      };
+
+      row.appendChild(color);
+      row.appendChild(name);
+      row.appendChild(count);
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+
+    if (!areaEditor.open) areaEditor.showModal();
+  }
+
+  function addArea() {
+    var palette = ["#4fd1c5", "#eab64d", "#8fd17c", "#ef8093"];
+    var color = palette[snap.areas.length % palette.length];
+    runBatch(["area " + quote(t("ar.newName")) + " " + color]).then(function (ok) {
+      if (ok) openAreaEditor();
+    });
+  }
+
+  /* ---------- running a batch ---------- */
+
+  function runBatch(lines) {
+    var before = {};
+    snap.nodes.forEach(function (node) { before[node.id] = node.status; });
+
+    return backend
+      .executeAll(lines)
+      .then(function (outcome) {
+        adopt(outcome.snapshot);
+        render();
+        paintChrome();
+        celebrate(before);
+        if (outcome.node && byId[outcome.node]) select(outcome.node);
+        return true;
+      })
+      .catch(function (error) {
+        toast(message(error), true);
+        return false;
+      });
   }
 
   /* ---------- toast ---------- */
@@ -1249,6 +1513,7 @@
       render();
       fit();
     });
+    document.getElementById("manageAreas").onclick = openAreaEditor;
     document.getElementById("dockToggle").addEventListener("click", function () {
       dockEl.hidden = !dockEl.hidden;
     });
@@ -1260,6 +1525,36 @@
     dlg.addEventListener("click", function (ev) {
       if (ev.target === dlg) dlg.close();
     });
+
+    editor = document.getElementById("editor");
+    areaEditor = document.getElementById("areas-editor");
+
+    document.getElementById("newBtn").onclick = function () {
+      if (snap.areas.length) openEditor(null); else openAreaEditor();
+    };
+    document.getElementById("edSave").onclick = saveEditor;
+    document.getElementById("edCancel").onclick = function () { editor.close(); };
+    document.getElementById("edClose").onclick = function () { editor.close(); };
+    document.getElementById("edDelete").onclick = deleteFromEditor;
+    editor.addEventListener("click", function (ev) {
+      if (ev.target === editor) editor.close();
+    });
+    // Enter saves from any single-line field, because tabbing to the button
+    // to commit a two-word change is a tax. The note is a textarea, where
+    // Enter has to stay a newline.
+    editor.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Enter" || ev.target.tagName === "TEXTAREA") return;
+      ev.preventDefault();
+      saveEditor();
+    });
+
+    document.getElementById("arAdd").onclick = addArea;
+    document.getElementById("arDone").onclick = function () { areaEditor.close(); };
+    document.getElementById("arClose").onclick = function () { areaEditor.close(); };
+    areaEditor.addEventListener("click", function (ev) {
+      if (ev.target === areaEditor) areaEditor.close();
+    });
+    document.getElementById("emptyBtn").onclick = openAreaEditor;
 
     palIn.addEventListener("input", refreshPalette);
     palIn.addEventListener("keydown", function (ev) {
@@ -1293,7 +1588,7 @@
       if (palette.hidden) openPalette(); else closePalette();
       return;
     }
-    if (dlg.open || !palette.hidden) return;
+    if (dlg.open || editor.open || areaEditor.open || !palette.hidden) return;
     var typing = ev.target === qInput;
     if (ev.key === ":" && !typing) { ev.preventDefault(); openPalette(); return; }
     if (ev.key === "/" && !typing) { ev.preventDefault(); qInput.focus(); qInput.select(); return; }
@@ -1304,14 +1599,25 @@
       return;
     }
     if (typing || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+
+    // Every shortcut below has to stop the default action. A key that opens a
+    // dialog focuses a field inside it, and without this the very keystroke
+    // that opened the dialog is then typed into that field.
     var key = ev.key.toLowerCase();
-    if (key === "f") fit();
+    var handled = true;
+    if (key === "n") { if (snap.areas.length) openEditor(null); else openAreaEditor(); }
+    else if (key === "a") openAreaEditor();
+    else if (key === "e" && state.selected) openEditor(state.selected);
+    else if (key === "f") fit();
     else if (key === "q") toggleQueue();
     else if (key === "u") undo();
     else if (key === "s") { paintSettings(); dlg.showModal(); }
     else if (key === "1" || key === "2" || key === "3") {
       setLayout(LAYOUTS[Number(key) - 1], true);
+    } else {
+      handled = false;
     }
+    if (handled) ev.preventDefault();
   }
 
   function boot() {
