@@ -2,12 +2,15 @@
 
 A dependency-aware, tree-alike TODO list. Break a goal into branches, unlock the next step as its prerequisites get done, and always see what is worth doing next.
 
+![The radial view: 121 tasks across six directions, finished work ringing the centre and the available frontier glowing around it](docs/images/radial-tree.png)
+
 > Status: the engine, a command line and a desktop window all work. Sync between devices is next.
 
 ## Idea
 
 - Any item can depend on any other item, across branches, not only parent to child.
 - An item is **locked** until its prerequisites are done, **available** once they are, and **done** when finished.
+- A **deadline** on one item is inherited by everything it depends on, earliest wins. Date the goal and the whole chain leading to it is dated.
 - The **tree view** shows the whole graph like a game skill tree. The **queue view** lists only what is available, ordered by priority.
 - One graph for everything: work features that block each other, hard skills, health, any long-term plan.
 
@@ -22,8 +25,11 @@ cargo run --bin branchy -- add "Calculus" after school pri 6
 cargo run --bin branchy -- add "Probability theory" after calculus pri 8
 cargo run --bin branchy -- done school
 
+cargo run --bin branchy -- due "Probability theory" 2027-03-01
+
 cargo run --bin branchy -- queue                     # what is available now
 cargo run --bin branchy -- why "Probability theory"  # what stands in the way
+cargo run --bin branchy -- calendar                  # what is due, and when
 cargo run --bin branchy -- tree                      # the whole graph
 cargo run --bin branchy -- undo                      # take the last change back
 ```
@@ -36,7 +42,7 @@ cargo run --bin branchy -- undo                      # take the last change back
 cd src-tauri && cargo build && ./target/debug/branchy-desktop
 ```
 
-The same graph, drawn as a skill tree. Three layouts, a queue view, search, and the same command line behind `:` or Ctrl+K.
+The same graph, drawn as a skill tree. Three layouts, a queue and a calendar, search, task and direction editing, and the same command line behind `:` or Ctrl+K.
 
 ## Stack
 
