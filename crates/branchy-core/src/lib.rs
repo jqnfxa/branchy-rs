@@ -51,12 +51,16 @@
 //! # Ok::<(), branchy_core::Error>(())
 //! ```
 
+mod command;
 mod error;
 mod graph;
 mod id;
 mod node;
+mod parse;
 
+pub use command::{Applied, Command};
 pub use error::Error;
 pub use graph::Graph;
 pub use id::{AreaId, NodeId};
 pub use node::{Area, NewArea, NewNode, Node, Status};
+pub use parse::{ParseError, parse, resolve_area, resolve_node};

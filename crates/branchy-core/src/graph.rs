@@ -313,7 +313,11 @@ impl Graph {
     /// left to right as "needs". Adding `dependent -> prerequisite` would close
     /// it, so the chain is returned with `prerequisite` appended: it starts and
     /// ends at the same node and can be shown to a user as-is.
-    fn closing_path(&self, dependent: NodeId, prerequisite: NodeId) -> Option<Vec<NodeId>> {
+    pub(crate) fn closing_path(
+        &self,
+        dependent: NodeId,
+        prerequisite: NodeId,
+    ) -> Option<Vec<NodeId>> {
         let mut parent: BTreeMap<NodeId, NodeId> = BTreeMap::new();
         let mut seen: BTreeSet<NodeId> = BTreeSet::new();
         let mut queue: VecDeque<NodeId> = VecDeque::new();
@@ -596,6 +600,19 @@ impl Graph {
             }
         }
         out
+    }
+
+    /// Puts a node back at an id it previously held, keeping the id counter
+    /// ahead of it so a later `add_node` cannot collide. Used only by undo.
+    pub(crate) fn insert_node_at(&mut self, id: NodeId, node: Node) {
+        self.next_node = self.next_node.max(id.raw() + 1);
+        self.nodes.insert(id, node);
+    }
+
+    /// Puts an area back at an id it previously held. Used only by undo.
+    pub(crate) fn insert_area_at(&mut self, id: AreaId, area: Area) {
+        self.next_area = self.next_area.max(id.raw() + 1);
+        self.areas.insert(id, area);
     }
 
     fn dependents_index(&self) -> BTreeMap<NodeId, Vec<NodeId>> {
