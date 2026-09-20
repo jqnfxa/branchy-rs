@@ -230,3 +230,28 @@ fn list_filters_by_status() {
 
     assert!(fails(&scratch, &["list", "--status", "nonsense"]).contains("unknown status"));
 }
+
+#[test]
+fn snapshot_carries_the_derived_picture() {
+    let scratch = seeded("snapshot");
+    run(&scratch, &["done", "school"]);
+    let json = run(&scratch, &["snapshot"]);
+
+    // the frontend must never have to recompute any of this
+    assert!(json.contains("\"status\": \"done\""));
+    assert!(json.contains("\"status\": \"available\""));
+    assert!(json.contains("\"status\": \"locked\""));
+    assert!(json.contains("\"tier\": 2"));
+    assert!(json.contains("\"dependents\""));
+    assert!(json.contains("\"queue\""));
+    assert!(json.contains("\"cycles\": []"));
+    assert!(json.contains("\"available\": 1"));
+}
+
+#[test]
+fn snapshot_of_an_empty_graph_is_still_valid() {
+    let scratch = Scratch::new("snapshot-empty");
+    let json = run(&scratch, &["snapshot"]);
+    assert!(json.contains("\"nodes\": []"));
+    assert!(json.contains("\"total\": 0"));
+}

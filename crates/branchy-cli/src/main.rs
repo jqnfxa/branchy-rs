@@ -5,6 +5,7 @@
 //! the terminal and the in-app command line can never drift apart.
 
 mod render;
+mod snapshot;
 mod store;
 
 use std::fmt::Write as _;
@@ -81,6 +82,8 @@ enum Cmd {
     Show(Rest),
     /// Report dependency cycles and how to break them
     Cycles,
+    /// Print the whole graph as JSON, exactly as a user interface receives it
+    Snapshot,
     /// Undo the last change
     Undo,
     /// Print where the document lives
@@ -124,6 +127,11 @@ fn run(cli: &Cli) -> Result<String, String> {
         Cmd::Queue => return Ok(render::queue(&graph)),
         Cmd::Tree => return Ok(render::tree(&graph)),
         Cmd::Cycles => return Ok(render::cycles(&graph)),
+        Cmd::Snapshot => {
+            let json = serde_json::to_string_pretty(&snapshot::Snapshot::of(&graph))
+                .map_err(|e| e.to_string())?;
+            return Ok(format!("{json}\n"));
+        }
         Cmd::List { area, status } => {
             let wanted = match status.as_deref() {
                 None => None,
@@ -165,6 +173,7 @@ fn run(cli: &Cli) -> Result<String, String> {
         | Cmd::Why(_)
         | Cmd::Show(_)
         | Cmd::Cycles
+        | Cmd::Snapshot
         | Cmd::Undo
         | Cmd::Where => unreachable!("handled above"),
     };
