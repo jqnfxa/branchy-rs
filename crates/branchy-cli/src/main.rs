@@ -46,6 +46,8 @@ enum Cmd {
     Rm(Rest),
     /// Set a task's priority: pri <task> <0-255>
     Pri(Rest),
+    /// Set or clear a deadline: due <task> <YYYY-MM-DD | none>
+    Due(Rest),
     /// Rename a task: rename <task> "New name"
     Rename(Rest),
     /// Replace a task's note: note <task> "text"
@@ -86,6 +88,8 @@ enum Cmd {
     Why(Rest),
     /// One task in full
     Show(Rest),
+    /// Everything with a deadline, grouped by how soon it is
+    Calendar,
     /// Report dependency cycles and how to break them
     Cycles,
     /// Print the whole graph as JSON, exactly as a user interface receives it
@@ -133,6 +137,7 @@ fn run(cli: &Cli) -> Result<String, String> {
         Cmd::Queue => return Ok(render::queue(&graph)),
         Cmd::Tree => return Ok(render::tree(&graph)),
         Cmd::Cycles => return Ok(render::cycles(&graph)),
+        Cmd::Calendar => return Ok(render::calendar(&graph)),
         Cmd::Snapshot => {
             let json = serde_json::to_string_pretty(&snapshot::Snapshot::of(&graph))
                 .map_err(|e| e.to_string())?;
@@ -165,6 +170,7 @@ fn run(cli: &Cli) -> Result<String, String> {
         Cmd::Undone(rest) => line("undone", &rest.args),
         Cmd::Rm(rest) => line("rm", &rest.args),
         Cmd::Pri(rest) => line("pri", &rest.args),
+        Cmd::Due(rest) => line("due", &rest.args),
         Cmd::Rename(rest) => line("rename", &rest.args),
         Cmd::Note(rest) => line("note", &rest.args),
         Cmd::Move(rest) => line("move", &rest.args),
@@ -181,6 +187,7 @@ fn run(cli: &Cli) -> Result<String, String> {
         | Cmd::Why(_)
         | Cmd::Show(_)
         | Cmd::Cycles
+        | Cmd::Calendar
         | Cmd::Snapshot
         | Cmd::Undo
         | Cmd::Where => unreachable!("handled above"),
@@ -212,11 +219,21 @@ fn load(path: &std::path::Path) -> Result<Graph, String> {
 
 fn tally(graph: &Graph) -> String {
     let done = graph.nodes().filter(|(_, n)| n.done).count();
-    format!(
+    let now = branchy_app::today();
+    let overdue = graph
+        .effective_due()
+        .iter()
+        .filter(|(id, date)| **date < now && graph.node(**id).is_some_and(|node| !node.done))
+        .count();
+    let mut line = format!(
         "{done}/{} done, {} available",
         graph.node_count(),
         graph.queue().len()
-    )
+    );
+    if overdue > 0 {
+        let _ = write!(line, ", {overdue} overdue");
+    }
+    line
 }
 
 /// Errors from the graph carry ids; a person wants names.

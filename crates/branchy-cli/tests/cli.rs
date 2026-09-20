@@ -320,3 +320,98 @@ fn snapshot_of_an_empty_graph_is_still_valid() {
     assert!(json.contains("\"nodes\": []"));
     assert!(json.contains("\"total\": 0"));
 }
+
+// ── deadlines ────────────────────────────────────────────────────────────
+
+#[test]
+fn a_deadline_survives_a_save_and_reload() {
+    let scratch = seeded("due-persist");
+    run(&scratch, &["due", "calculus", "2027-03-01"]);
+    assert!(run(&scratch, &["show", "calculus"]).contains("2027-03-01"));
+    // a fresh process, so this came off disk
+    assert!(run(&scratch, &["calendar"]).contains("2027-03-01"));
+}
+
+#[test]
+fn a_deadline_can_be_cleared() {
+    let scratch = seeded("due-clear");
+    run(&scratch, &["due", "calculus", "2027-03-01"]);
+    run(&scratch, &["due", "calculus", "none"]);
+    assert!(run(&scratch, &["calendar"]).contains("Nothing has a deadline"));
+}
+
+#[test]
+fn an_impossible_date_is_refused_before_anything_is_written() {
+    let scratch = seeded("due-bad");
+    assert!(fails(&scratch, &["due", "calculus", "2027-02-30"]).contains("not a date"));
+    assert!(run(&scratch, &["calendar"]).contains("Nothing has a deadline"));
+}
+
+#[test]
+fn the_calendar_marks_an_inherited_deadline() {
+    let scratch = seeded("due-inherit");
+    // probability needs calculus needs school algebra
+    run(&scratch, &["due", "probability", "2027-03-01"]);
+    let calendar = run(&scratch, &["calendar"]);
+
+    assert!(calendar.contains("Probability theory"));
+    assert!(calendar.contains("Calculus"));
+    assert!(calendar.contains("School algebra"));
+    assert_eq!(
+        calendar.matches("inherited").count(),
+        2,
+        "the two prerequisites inherited it, the goal did not: {calendar}"
+    );
+}
+
+#[test]
+fn an_inherited_deadline_reorders_the_queue() {
+    let scratch = seeded("due-queue");
+    run(&scratch, &["add", "Unrelated", "pri", "9"]);
+    run(&scratch, &["pri", "school", "1"]);
+
+    // nothing urgent: priority decides
+    let before = run(&scratch, &["queue"]);
+    let unrelated_first = before.find("Unrelated").expect("listed");
+    let school_first = before.find("School algebra").expect("listed");
+    assert!(unrelated_first < school_first);
+
+    // now the chain school algebra feeds has a date
+    run(&scratch, &["due", "probability", "2026-10-01"]);
+    let after = run(&scratch, &["queue"]);
+    let unrelated_then = after.find("Unrelated").expect("listed");
+    let school_then = after.find("School algebra").expect("listed");
+    assert!(
+        school_then < unrelated_then,
+        "priority 1 outranks priority 9 once a deadline reaches it: {after}"
+    );
+}
+
+#[test]
+fn overdue_work_is_counted_in_the_tally() {
+    let scratch = seeded("due-overdue");
+    assert!(
+        !run(&scratch, &["done", "school"]).contains("overdue"),
+        "nothing has a date yet"
+    );
+
+    run(&scratch, &["due", "calculus", "2000-01-01"]);
+    assert!(run(&scratch, &["pri", "calculus", "6"]).contains("overdue"));
+
+    // finishing it takes it out of the count
+    assert!(!run(&scratch, &["done", "calculus"]).contains("overdue"));
+}
+
+#[test]
+fn a_document_written_before_deadlines_still_loads() {
+    let scratch = Scratch::new("due-old-format");
+    std::fs::write(
+        scratch.path(),
+        r##"{"version":1,
+            "areas":[{"id":0,"name":"Work","color":"#4fd1c5"}],
+            "nodes":[{"id":0,"name":"Old task","area":0,"priority":5,"done":false}]}"##,
+    )
+    .expect("write");
+    assert!(run(&scratch, &["queue"]).contains("Old task"));
+    assert!(run(&scratch, &["calendar"]).contains("Nothing has a deadline"));
+}

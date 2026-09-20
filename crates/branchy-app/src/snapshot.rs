@@ -10,6 +10,8 @@
 //! developable, and the app scriptable, without a running window.
 
 use branchy_core::{Graph, NodeId, Status};
+
+use crate::today::{Urgency, today};
 use serde::Serialize;
 
 /// The graph as a user interface wants it.
@@ -25,6 +27,9 @@ pub struct Snapshot {
     pub cycles: Vec<Vec<String>>,
     /// Counts for the top bar.
     pub tally: Tally,
+    /// The day this snapshot was taken, so the interface agrees with the
+    /// backend about what "overdue" means.
+    pub today: String,
 }
 
 /// One direction.
@@ -65,6 +70,14 @@ pub struct NodeView {
     pub status: String,
     /// Absent when the task sits on or after a cycle.
     pub tier: Option<u32>,
+    /// The deadline written on this task, if any.
+    pub due: Option<String>,
+    /// The deadline it is really working to, inherited from whatever needs it.
+    pub effective_due: Option<String>,
+    /// Days until that deadline. Negative when it has passed.
+    pub days_left: Option<i64>,
+    /// `overdue`, `today`, `soon` or `later`. Absent when there is no deadline.
+    pub urgency: Option<&'static str>,
 }
 
 /// Counts for the top bar.
@@ -76,6 +89,8 @@ pub struct Tally {
     pub done: usize,
     /// Tasks whose prerequisites are all met.
     pub available: usize,
+    /// Unfinished tasks whose deadline has passed.
+    pub overdue: usize,
 }
 
 fn key(id: NodeId) -> String {
@@ -88,6 +103,8 @@ impl Snapshot {
     pub fn of(graph: &Graph) -> Self {
         let statuses = graph.statuses();
         let tiers = graph.tiers();
+        let deadlines = graph.effective_due();
+        let now = today();
 
         let areas = graph
             .areas()
@@ -126,17 +143,29 @@ impl Snapshot {
                 }
                 .to_string(),
                 tier: tiers.get(&id).copied(),
+                due: node.due.map(|date| date.to_string()),
+                effective_due: deadlines.get(&id).map(ToString::to_string),
+                days_left: deadlines.get(&id).map(|date| now.days_until(*date)),
+                urgency: deadlines
+                    .get(&id)
+                    .map(|date| Urgency::of(*date, now).name()),
             })
             .collect();
 
         let done = nodes.iter().filter(|node| node.done).count();
         let queue: Vec<String> = graph.queue().into_iter().map(key).collect();
+        let overdue = nodes
+            .iter()
+            .filter(|node| !node.done && node.urgency == Some("overdue"))
+            .count();
 
         Self {
+            today: now.to_string(),
             tally: Tally {
                 total: nodes.len(),
                 done,
                 available: queue.len(),
+                overdue,
             },
             areas,
             queue,

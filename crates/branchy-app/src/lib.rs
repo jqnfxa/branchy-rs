@@ -10,9 +10,12 @@
 //!   undo. Phase 3 replaces its body with Automerge behind the same functions.
 //! - [`snapshot`] — the whole derived picture in one value, so a user interface
 //!   never recomputes status, tier or the queue for itself.
+//! - [`today`] — the clock, which the graph engine deliberately cannot read.
 
 pub mod snapshot;
 pub mod store;
+pub mod today;
 
 pub use snapshot::{Outcome, Snapshot};
 pub use store::StoreError;
+pub use today::{Urgency, today};

@@ -5,7 +5,8 @@
 
 use std::fmt::Write as _;
 
-use branchy_core::{Graph, NodeId, Status};
+use branchy_app::today::{Urgency, today};
+use branchy_core::{Date, Graph, NodeId, Status};
 
 /// One marker per status, so a list stays scannable down the left edge.
 fn mark(status: Status) -> &'static str {
@@ -40,6 +41,8 @@ fn row(out: &mut String, text: &str) {
 #[must_use]
 pub fn queue(graph: &Graph) -> String {
     let queue = graph.queue();
+    let deadlines = graph.effective_due();
+    let now = today();
     if queue.is_empty() {
         return "Nothing is available. Try `branchy cycles`, or finish something first.\n".into();
     }
@@ -49,10 +52,13 @@ pub fn queue(graph: &Graph) -> String {
             continue;
         };
         let unlocks = graph.dependents(*id).len();
+        let deadline = deadlines.get(id).map_or_else(String::new, |date| {
+            format!("{:<14}", when(now.days_until(*date)))
+        });
         row(
             &mut out,
             &format!(
-                "{:>3}. {:<38} p{:<3} {:<14} {}",
+                "{:>3}. {:<38} p{:<3} {:<14} {deadline}{}",
                 rank + 1,
                 truncate(&node.name, 38),
                 node.priority,
@@ -252,6 +258,19 @@ pub fn show(graph: &Graph, id: NodeId) -> String {
             .tier(id)
             .map_or_else(|| "-".to_string(), |t| t.to_string())
     );
+    if let Some(date) = graph.effective_due().get(&id) {
+        let now = today();
+        let _ = writeln!(
+            out,
+            "  due {date}  {}{}",
+            when(now.days_until(*date)),
+            if node.due.is_none() {
+                ", inherited from what it unblocks"
+            } else {
+                ""
+            }
+        );
+    }
     if !node.note.is_empty() {
         let _ = writeln!(out, "  {}", node.note);
     }
@@ -281,6 +300,78 @@ pub fn show(graph: &Graph, id: NodeId) -> String {
         }
     }
     out
+}
+
+/// Everything with a deadline, grouped by how soon it is.
+///
+/// Inherited deadlines are shown alongside written ones and marked, because a
+/// task is just as due whether the date is on it or on the thing it unblocks.
+#[must_use]
+pub fn calendar(graph: &Graph) -> String {
+    let now = today();
+    let deadlines = graph.effective_due();
+    let statuses = graph.statuses();
+
+    let mut rows: Vec<(Date, NodeId)> = deadlines
+        .iter()
+        .filter(|(id, _)| statuses.get(id) != Some(&Status::Done))
+        .map(|(id, date)| (*date, *id))
+        .collect();
+    if rows.is_empty() {
+        return "Nothing has a deadline. Try `branchy due <task> 2026-12-31`.\n".into();
+    }
+    rows.sort_unstable();
+
+    let mut out = format!("Today is {now}.\n");
+    let mut heading: Option<&'static str> = None;
+
+    for (date, id) in rows {
+        let Some(node) = graph.node(id) else { continue };
+        let urgency = Urgency::of(date, now);
+        if heading != Some(urgency.name()) {
+            let _ = writeln!(out, "\n{}", label(urgency, now));
+            heading = Some(urgency.name());
+        }
+        let days = now.days_until(date);
+        let inherited = node.due.is_none();
+        row(
+            &mut out,
+            &format!(
+                "  {} {}  {:<36} {:<12} {}",
+                mark(statuses.get(&id).copied().unwrap_or(Status::Locked)),
+                date,
+                truncate(&node.name, 36),
+                truncate(&area_of(graph, id), 12),
+                if inherited {
+                    format!("{}  inherited", when(days))
+                } else {
+                    when(days)
+                }
+            ),
+        );
+    }
+    out
+}
+
+fn label(urgency: Urgency, now: Date) -> String {
+    match urgency {
+        Urgency::Overdue => "OVERDUE".to_string(),
+        Urgency::Today => format!("TODAY, {now}"),
+        Urgency::Soon => "THIS WEEK".to_string(),
+        Urgency::Later => "LATER".to_string(),
+    }
+}
+
+fn when(days: i64) -> String {
+    match days {
+        0 => "today".to_string(),
+        1 => "tomorrow".to_string(),
+        -1 => "1 day late".to_string(),
+        d if d < 0 => format!("{} days late", -d),
+        d if d < 14 => format!("in {d} days"),
+        d if d < 60 => format!("in {} weeks", d / 7),
+        d => format!("in {} months", d / 30),
+    }
 }
 
 /// Any tangles in the graph, with the commands that would break them.
