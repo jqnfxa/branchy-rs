@@ -7,22 +7,24 @@ No dependencies. No filesystem, no UI, no clock — which is what lets the same 
 ```rust
 use branchy_core::{Graph, NewArea, NewNode, Status};
 
-let mut graph = Graph::new();
-let maths = graph.add_area(NewArea::new("Hard skills", "#4fd1c5"));
+fn main() -> Result<(), branchy_core::Error> {
+    let mut graph = Graph::new();
+    let maths = graph.add_area(NewArea::new("Hard skills", "#4fd1c5"));
 
-let algebra = graph.add_node(NewNode::new("School algebra", maths))?;
-let calculus = graph.add_node(NewNode::new("Calculus", maths).with_priority(7))?;
-graph.add_prerequisite(calculus, algebra)?;
+    let algebra = graph.add_node(NewNode::new("School algebra", maths))?;
+    let calculus = graph.add_node(NewNode::new("Calculus", maths).with_priority(7))?;
+    graph.add_prerequisite(calculus, algebra)?;
 
-assert_eq!(graph.status(calculus), Some(Status::Locked));
-graph.set_done(algebra, true)?;
-assert_eq!(graph.status(calculus), Some(Status::Available));
-assert_eq!(graph.queue(), vec![calculus]);
+    assert_eq!(graph.status(calculus), Some(Status::Locked));
+    graph.set_done(algebra, true)?;
+    assert_eq!(graph.status(calculus), Some(Status::Available));
+    assert_eq!(graph.queue(), vec![calculus]);
 
-// the reverse edge would close a loop, so it is refused, and the refusal
-// carries the loop it found
-assert!(graph.add_prerequisite(algebra, calculus).is_err());
-# Ok::<(), branchy_core::Error>(())
+    // the reverse edge would close a loop, so it is refused, and the
+    // refusal carries the loop it found
+    assert!(graph.add_prerequisite(algebra, calculus).is_err());
+    Ok(())
+}
 ```
 
 ## What it computes

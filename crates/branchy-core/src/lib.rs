@@ -51,6 +51,12 @@
 //! # Ok::<(), branchy_core::Error>(())
 //! ```
 
+/// Runs the README's examples as doctests, so the front page of the crate
+/// cannot quietly stop compiling. Never appears in the rendered documentation.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct Readme;
+
 mod command;
 mod date;
 mod error;
