@@ -149,3 +149,18 @@ impl Snapshot {
         }
     }
 }
+
+/// What a command did, and the graph afterwards.
+///
+/// A user interface needs both: the snapshot to redraw, and the id so it can
+/// select and fly to whatever was just created. Working the id out by diffing
+/// two snapshots would be guesswork.
+#[derive(Debug, Serialize)]
+pub struct Outcome {
+    /// The task the command created or changed, if there was one.
+    pub node: Option<String>,
+    /// The direction the command created or changed, if there was one.
+    pub area: Option<String>,
+    /// The whole graph, after.
+    pub snapshot: Snapshot,
+}

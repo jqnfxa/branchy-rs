@@ -14,5 +14,5 @@
 pub mod snapshot;
 pub mod store;
 
-pub use snapshot::Snapshot;
+pub use snapshot::{Outcome, Snapshot};
 pub use store::StoreError;

@@ -532,3 +532,21 @@ fn a_note_with_spaces_and_punctuation_round_trips() {
     graph.apply(command).expect("applies");
     assert_eq!(graph.node(ids[0]).expect("exists").note, note);
 }
+
+#[test]
+fn add_can_carry_a_note_in_one_command() {
+    let (mut graph, _, _) = fixture(&[]);
+    let command = parse(
+        &graph,
+        r#"add "Limit order book" in hard pri 10 note "Price-time priority, measured.""#,
+    );
+    let id = graph
+        .apply(command)
+        .expect("applies")
+        .node
+        .expect("created");
+    let node = graph.node(id).expect("exists");
+    assert_eq!(node.name, "Limit order book");
+    assert_eq!(node.note, "Price-time priority, measured.");
+    assert_eq!(node.priority, 10);
+}

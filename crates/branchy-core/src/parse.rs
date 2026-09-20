@@ -5,7 +5,7 @@
 //! other.
 //!
 //! ```text
-//! add <name> [in <area>] [after a, b] [before c] [pri n]
+//! add <name> [in <area>] [after a, b] [before c] [pri n] [note "..."]
 //! done <task>            undone <task>
 //! link <a> after <b>     link <a> before <b>     unlink <a> after <b>
 //! rm <task>              pri <task> <n>          rename <task> <name>
@@ -88,8 +88,8 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-const KEYWORDS: [&str; 7] = [
-    "in", "after", "needs", "before", "blocks", "pri", "priority",
+const KEYWORDS: [&str; 8] = [
+    "in", "after", "needs", "before", "blocks", "pri", "priority", "note",
 ];
 
 fn is_keyword(word: &str) -> bool {
@@ -389,6 +389,7 @@ fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
     let mut after: Vec<String> = Vec::new();
     let mut before: Vec<String> = Vec::new();
     let mut priority: u8 = 5;
+    let mut note = String::new();
 
     while at < tokens.len() {
         let keyword = tokens[at].to_ascii_lowercase();
@@ -401,6 +402,7 @@ fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
 
         match keyword.as_str() {
             "in" => area_ref = Some(join(values)),
+            "note" => note = values.join(" "),
             "after" | "needs" => after.extend(split_list(values)),
             "before" | "blocks" => before.extend(split_list(values)),
             _ => {
@@ -435,7 +437,7 @@ fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
 
     Ok(Command::AddNode {
         name,
-        note: String::new(),
+        note,
         area,
         priority,
         prereqs,
