@@ -16,6 +16,13 @@ use serde::{Deserialize, Serialize};
 /// Bumped when the shape changes in a way an older reader could not cope with.
 const FORMAT_VERSION: u32 = 1;
 
+/// How many changes can be taken back.
+///
+/// Kept as whole documents beside the real one rather than as a command log,
+/// because a document that will not parse can still be recovered by hand, and
+/// twenty copies of a planning graph cost nothing.
+const UNDO_DEPTH: usize = 20;
+
 /// One stored graph.
 #[derive(Debug, Serialize, Deserialize)]
 struct Document {
@@ -182,12 +189,21 @@ impl Document {
     }
 }
 
-/// Where the document lives when `--file` is not given.
+/// Where the document lives when none was named.
+///
+/// `BRANCHY_FILE` wins, because the per-user data directory is derived from
+/// `HOME` and sandboxes rewrite it: run from inside a snap and you would
+/// silently get a second, empty graph. Every front end resolves the path this
+/// way so they always agree.
 ///
 /// # Errors
 ///
-/// [`StoreError::NoHome`] when the platform offers no data directory.
+/// [`StoreError::NoHome`] when the platform offers no data directory and the
+/// environment variable is not set either.
 pub fn default_path() -> Result<PathBuf, StoreError> {
+    if let Some(given) = std::env::var_os("BRANCHY_FILE") {
+        return Ok(PathBuf::from(given));
+    }
     directories::ProjectDirs::from("dev", "jqnfxa", "branchy")
         .map(|dirs| dirs.data_dir().join("graph.json"))
         .ok_or(StoreError::NoHome)
@@ -207,7 +223,7 @@ pub fn load(path: &Path) -> Result<Graph, StoreError> {
     }
 }
 
-/// Writes the graph, keeping the previous contents for `undo`.
+/// Writes the graph, pushing the previous contents onto the undo stack.
 ///
 /// The new file is written beside the target and renamed over it, because a
 /// half-written document is exactly what a sync tool would happily propagate to
@@ -221,35 +237,69 @@ pub fn save(path: &Path, graph: &Graph) -> Result<(), StoreError> {
         fs::create_dir_all(parent)?;
     }
     if path.exists() {
-        fs::copy(path, undo_path(path))?;
+        push_undo(path)?;
     }
     write_atomically(path, graph)
 }
 
-/// Swaps the document with the copy kept by the last `save`.
+/// Takes back the last change.
+///
+/// This is a stack, not a swap: calling it twice goes back two changes rather
+/// than returning where it started. There is no redo, so an undo too far is
+/// re-entered by hand — which is the predictable half of the trade, and the
+/// reason the old toggle had to go.
 ///
 /// # Errors
 ///
-/// [`StoreError::NothingToUndo`] if no previous version was kept, otherwise
+/// [`StoreError::NothingToUndo`] when the stack is empty, otherwise
 /// [`StoreError::Io`].
 pub fn undo(path: &Path) -> Result<(), StoreError> {
-    let previous = undo_path(path);
-    if !previous.exists() {
+    let newest = undo_path(path, 1);
+    if !newest.exists() {
         return Err(StoreError::NothingToUndo);
     }
-    let swap = path.with_extension("json.swap");
-    if path.exists() {
-        fs::rename(path, &swap)?;
-    }
-    fs::rename(&previous, path)?;
-    if swap.exists() {
-        fs::rename(&swap, &previous)?;
+    fs::rename(&newest, path)?;
+
+    // everything older moves up one place
+    for slot in 2..=UNDO_DEPTH {
+        let from = undo_path(path, slot);
+        if !from.exists() {
+            break;
+        }
+        fs::rename(&from, undo_path(path, slot - 1))?;
     }
     Ok(())
 }
 
-fn undo_path(path: &Path) -> PathBuf {
-    path.with_extension("json.undo")
+/// How many changes could still be taken back.
+#[must_use]
+pub fn undo_depth(path: &Path) -> usize {
+    (1..=UNDO_DEPTH)
+        .take_while(|slot| undo_path(path, *slot).exists())
+        .count()
+}
+
+/// Moves the current document into slot 1, shifting the rest down and dropping
+/// whatever falls off the end.
+fn push_undo(path: &Path) -> Result<(), StoreError> {
+    let oldest = undo_path(path, UNDO_DEPTH);
+    if oldest.exists() {
+        fs::remove_file(&oldest)?;
+    }
+    for slot in (1..UNDO_DEPTH).rev() {
+        let from = undo_path(path, slot);
+        if from.exists() {
+            fs::rename(&from, undo_path(path, slot + 1))?;
+        }
+    }
+    fs::copy(path, undo_path(path, 1))?;
+    Ok(())
+}
+
+fn undo_path(path: &Path, slot: usize) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".undo{slot}"));
+    path.with_file_name(name)
 }
 
 fn write_atomically(path: &Path, graph: &Graph) -> Result<(), StoreError> {

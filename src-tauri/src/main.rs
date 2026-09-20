@@ -95,12 +95,9 @@ mod commands {
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            // BRANCHY_FILE lets a second document be opened without a rebuild,
-            // which is what makes the shell testable against a fixture.
-            let path = match std::env::var_os("BRANCHY_FILE") {
-                Some(given) => PathBuf::from(given),
-                None => store::default_path()?,
-            };
+            // store::default_path already honours BRANCHY_FILE, so the shell
+            // and the terminal always open the same document.
+            let path = store::default_path()?;
             let graph = store::load(&path)?;
             app.manage(Open(Mutex::new(Session { graph, path })));
             Ok(())

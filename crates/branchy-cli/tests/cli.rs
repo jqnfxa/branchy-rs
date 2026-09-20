@@ -185,6 +185,71 @@ fn undo_reverses_the_last_change() {
 }
 
 #[test]
+fn undo_is_a_stack_and_not_a_toggle() {
+    let scratch = seeded("undo-stack");
+    run(&scratch, &["add", "Alpha"]);
+    run(&scratch, &["add", "Beta"]);
+    run(&scratch, &["add", "Gamma"]);
+    assert!(run(&scratch, &["list"]).contains("Gamma"));
+
+    run(&scratch, &["undo"]);
+    assert!(!run(&scratch, &["list"]).contains("Gamma"));
+
+    // a toggle would bring Gamma back here; a stack keeps going backwards
+    run(&scratch, &["undo"]);
+    let listing = run(&scratch, &["list"]);
+    assert!(!listing.contains("Gamma"), "still gone: {listing}");
+    assert!(!listing.contains("Beta"), "Beta went too: {listing}");
+    assert!(listing.contains("Alpha"));
+
+    run(&scratch, &["undo"]);
+    assert!(!run(&scratch, &["list"]).contains("Alpha"));
+}
+
+#[test]
+fn undo_runs_out_rather_than_wrapping_around() {
+    let scratch = seeded("undo-exhaust");
+    run(&scratch, &["add", "Only"]);
+
+    // unwind everything, however many saves that turns out to be
+    let mut steps = 0;
+    loop {
+        let output = std::process::Command::new(binary())
+            .arg("--file")
+            .arg(scratch.path())
+            .arg("undo")
+            .output()
+            .expect("binary runs");
+        if !output.status.success() {
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains("nothing to undo"),
+                "ran out for the wrong reason"
+            );
+            break;
+        }
+        steps += 1;
+        assert!(steps < 30, "undo never ran out, so it is wrapping around");
+    }
+    assert!(steps > 0, "there was something to undo");
+}
+
+#[test]
+fn branchy_file_decides_the_document() {
+    let scratch = seeded("env-file");
+    let output = std::process::Command::new(binary())
+        .env("BRANCHY_FILE", scratch.path())
+        .arg("where")
+        .output()
+        .expect("binary runs");
+    let printed = String::from_utf8(output.stdout).expect("utf-8");
+    assert_eq!(
+        printed.trim(),
+        scratch.path().to_string_lossy(),
+        "the environment variable has to win, or a sandboxed HOME silently          opens a second empty graph"
+    );
+}
+
+#[test]
 fn undo_with_no_history_says_so() {
     let scratch = Scratch::new("undo-empty");
     assert!(fails(&scratch, &["undo"]).contains("nothing to undo"));
