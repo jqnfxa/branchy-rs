@@ -28,7 +28,10 @@
 
     <span class="spacer"></span>
     <button class="btn tiny" id="newBtn"></button>
-    <span class="seg"><button id="queueBtn" aria-pressed="false"></button></span>
+    <span class="seg">
+      <button id="queueBtn" aria-pressed="false"></button>
+      <button id="calBtn" aria-pressed="false"></button>
+    </span>
     <div class="tally" id="tally"></div>
     <button class="iconbtn" id="setBtn" aria-label="Settings">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
@@ -80,6 +83,15 @@
         <div class="lvl" id="zLvl">100%</div>
       </div>
 
+      <aside class="queue" id="calendar" hidden>
+        <div class="qhead">
+          <h2 id="calTitle"></h2>
+          <button class="xbtn" id="calClose" aria-label="Close">&times;</button>
+        </div>
+        <p id="calBlurb"></p>
+        <div id="callist"></div>
+      </aside>
+
       <aside class="queue" id="queue" hidden>
         <div class="qhead">
           <h2 id="qTitle"></h2>
@@ -122,6 +134,11 @@
       <div class="field">
         <label for="edPri" id="edPriLbl"></label>
         <input id="edPri" type="number" min="0" max="255" step="1">
+      </div>
+      <div class="field">
+        <label for="edDue" id="edDueLbl"></label>
+        <input id="edDue" type="date">
+        <p class="help" id="edDueHelp"></p>
       </div>
     </div>
     <div class="field">

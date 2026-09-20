@@ -601,3 +601,40 @@ dialog.editor::backdrop{background:rgba(6,8,14,.62);backdrop-filter:blur(3px)}
 .empty-state .inner{max-width:38ch;display:flex;flex-direction:column;gap:12px;align-items:center}
 .empty-state h2{font-family:var(--display);font-size:22px;font-weight:700;margin:0}
 .empty-state p{font-size:13px;color:var(--text-dim);margin:0}
+
+/* ---------- deadlines ---------- */
+.due{
+  font-family:var(--mono);font-size:10.5px;
+  padding:1px 6px;border-radius:999px;white-space:nowrap;
+  border:1px solid var(--line-soft);color:var(--text-dim);
+}
+.due.overdue{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent);
+  background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.due.today{color:var(--a-career);border-color:color-mix(in srgb,var(--a-career) 45%,transparent)}
+.due.soon{color:var(--a-career)}
+.due.inherited{font-style:italic;opacity:.8}
+
+.insp .meta .due{margin-inline-start:-4px}
+
+.calgroup{margin-bottom:14px}
+.calgroup h3{
+  font-size:10.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--text-dim);margin:0 0 7px;display:flex;gap:8px;align-items:baseline;
+}
+.calgroup.overdue h3{color:var(--danger)}
+.calgroup ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.calgroup li{
+  --c:var(--a-hard);
+  display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;
+  padding:8px 10px;background:var(--bg-card);
+  border:1px solid var(--line-soft);border-inline-start:3px solid var(--c);
+  border-radius:8px;cursor:pointer;
+}
+.calgroup li:hover{border-color:var(--line);border-inline-start-color:var(--c)}
+.calgroup li .nm{font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.calgroup li .sub{font-size:11px;color:var(--text-dim)}
+
+/* a task the clock has caught up with, on the canvas */
+.node.is-overdue .disc{stroke:var(--danger)}
+.node.is-overdue .label{fill:var(--danger)}
+.tally .late{color:var(--danger)}

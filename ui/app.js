@@ -370,7 +370,9 @@
       var at = positions[node.id];
       if (!at) return;
       var group = el("g", {
-        class: "node " + node.status + (state.selected === node.id ? " sel" : ""),
+        class: "node " + node.status +
+          (node.urgency === "overdue" && !node.done ? " is-overdue" : "") +
+          (state.selected === node.id ? " sel" : ""),
         transform: "translate(" + at.x + "," + at.y + ")",
         tabindex: "0",
         role: "button",
@@ -709,6 +711,8 @@
       span.textContent = text;
       meta.appendChild(span);
     });
+    var badge = dueBadge(node);
+    if (badge) meta.appendChild(badge);
     body.appendChild(meta);
 
     if (node.note) {
@@ -805,6 +809,120 @@
     return wrap;
   }
 
+  /* ---------- the calendar ---------- */
+
+  var calendarEl, calBtn;
+  var BUCKETS = ["overdue", "today", "soon", "later"];
+
+  function paintCalendar() {
+    var host = document.getElementById("callist");
+    host.innerHTML = "";
+
+    var dated = snap.nodes
+      .filter(function (node) { return node.effective_due && !node.done; })
+      .sort(function (a, b) {
+        return a.effective_due < b.effective_due ? -1
+             : a.effective_due > b.effective_due ? 1
+             : b.priority - a.priority;
+      });
+
+    if (!dated.length) {
+      var none = document.createElement("p");
+      none.className = "help";
+      none.textContent = t("cal.none");
+      host.appendChild(none);
+      return;
+    }
+
+    BUCKETS.forEach(function (bucket) {
+      var rows = dated.filter(function (node) { return node.urgency === bucket; });
+      if (!rows.length) return;
+
+      // "Later" spanning six months is a list with a heading, not a calendar.
+      // Anything past this week is broken down by the month it falls in.
+      if (bucket === "later") {
+        var months = {};
+        var order = [];
+        rows.forEach(function (node) {
+          var key = node.effective_due.slice(0, 7);
+          if (!months[key]) { months[key] = []; order.push(key); }
+          months[key].push(node);
+        });
+        order.sort().forEach(function (key) {
+          host.appendChild(calGroup(monthName(key), months[key], "later"));
+        });
+        return;
+      }
+      host.appendChild(calGroup(t("cal." + bucket), rows, bucket));
+    });
+  }
+
+  // "October 2026" in whatever language is selected.
+  function monthName(yearMonth) {
+    var parts = yearMonth.split("-");
+    try {
+      return new Intl.DateTimeFormat(langById[state.lang].locale, {
+        year: "numeric",
+        month: "long",
+      }).format(new Date(Number(parts[0]), Number(parts[1]) - 1, 1));
+    } catch (e) {
+      return yearMonth;
+    }
+  }
+
+  function calGroup(heading, rows, bucket) {
+    var group = document.createElement("div");
+    group.className = "calgroup " + bucket;
+
+    var title = document.createElement("h3");
+    title.textContent = heading;
+    var count = document.createElement("span");
+    count.textContent = num(rows.length);
+    title.appendChild(count);
+    group.appendChild(title);
+
+    var list = document.createElement("ul");
+    rows.forEach(function (node) {
+      var row = document.createElement("li");
+      row.style.setProperty("--c", colorOf(node.area));
+      var left = document.createElement("div");
+      var name = document.createElement("div");
+      name.className = "nm";
+      name.textContent = node.name;
+      var sub = document.createElement("div");
+      sub.className = "sub";
+      sub.textContent = node.effective_due + (node.due ? "" : "  \u00b7  " + t("cal.inherited"));
+      left.appendChild(name);
+      left.appendChild(sub);
+      var badge = dueBadge(node);
+      row.appendChild(left);
+      if (badge) row.appendChild(badge);
+      row.onclick = function () {
+        if (!isShown(node.id)) {
+          state.focus = null;
+          state.visible[node.area] = true;
+          paintAreas();
+          render();
+        }
+        select(node.id);
+      };
+      list.appendChild(row);
+    });
+    group.appendChild(list);
+    return group;
+  }
+
+  function toggleCalendar(on) {
+    var show = on === undefined ? calendarEl.hidden : on;
+    calendarEl.hidden = !show;
+    calBtn.setAttribute("aria-pressed", String(show));
+    if (show) {
+      queueEl.hidden = true;
+      queueBtn.setAttribute("aria-pressed", "false");
+      paintCalendar();
+    }
+  }
+
   /* ---------- chrome ---------- */
 
   function paintAreas() {
@@ -864,11 +982,16 @@
   }
 
   function paintTally() {
-    document.getElementById("tally").innerHTML = t("tally", {
+    var text = t("tally", {
       done: snap.tally.done || 0,
       total: snap.tally.total || 0,
       avail: snap.tally.available || 0,
     });
+    if (snap.tally.overdue) {
+      text += " &nbsp;\u00b7&nbsp; <span class=\"late\">" +
+        t("tally.overdue", { n: snap.tally.overdue }) + "</span>";
+    }
+    document.getElementById("tally").innerHTML = text;
   }
 
   function paintLayoutSeg() {
@@ -924,6 +1047,8 @@
       tag.className = "tag";
       var area = areaById[node.area];
       tag.textContent = area ? area.name.split(" ")[0] : "";
+      var badge = dueBadge(node);
+      if (badge) sub.appendChild(document.createTextNode("  ")), sub.appendChild(badge);
       row.appendChild(priority);
       row.appendChild(middle);
       row.appendChild(tag);
@@ -954,7 +1079,7 @@
     document.getElementById("palHint").textContent = t("cmd.hint");
 
     var hints = [
-      ["new", "N"], ["ed.editTitle", "E"], ["ar.title", "A"],
+      ["new", "N"], ["ed.editTitle", "E"], ["ar.title", "A"], ["k.calendar", "C"],
       ["k.command", ":"], ["k.search", "/"], ["k.fit", "F"],
       ["k.queue", "Q"], ["k.layouts", "1 2 3"], ["k.settings", "S"],
       ["k.close", "Esc"],
@@ -997,7 +1122,12 @@
     document.getElementById("edAreaLbl").textContent = t("ed.area");
     document.getElementById("edPriLbl").textContent = t("ed.pri");
     document.getElementById("edNoteLbl").textContent = t("ed.note");
+    document.getElementById("edDueLbl").textContent = t("ed.due");
+    document.getElementById("edDueHelp").textContent = t("ed.dueHelp");
     document.getElementById("edNeedsLbl").textContent = t("ed.needs");
+    calBtn.textContent = t("cal.open");
+    document.getElementById("calTitle").textContent = t("cal.title");
+    document.getElementById("calBlurb").textContent = t("cal.blurb");
     document.getElementById("edNeedsHelp").textContent = t("ed.needsHelp");
     document.getElementById("edSave").textContent = t("ed.save");
     document.getElementById("edCancel").textContent = t("ed.cancel");
@@ -1015,6 +1145,7 @@
     paintTally();
     paintAreas();
     paintQueue();
+    if (!calendarEl.hidden) paintCalendar();
     if (state.selected) drawInspector(byId[state.selected]);
   }
 
@@ -1228,6 +1359,28 @@
     return String(text).replace(/\s*\n+\s*/g, " ").trim();
   }
 
+  /* ---------- deadlines ---------- */
+
+  // The backend already worked out the date and the days; this only chooses
+  // the words. Plural rules come from Intl, so Slavic languages stay correct.
+  function when(days) {
+    if (days === 0) return t("when.today");
+    if (days === 1) return t("when.tomorrow");
+    if (days < 0) return t("when.late", { n: -days });
+    if (days < 14) return t("when.days", { n: days });
+    if (days < 60) return t("when.weeks", { n: Math.floor(days / 7) });
+    return t("when.months", { n: Math.floor(days / 30) });
+  }
+
+  function dueBadge(node) {
+    if (!node.effective_due) return null;
+    var badge = document.createElement("span");
+    badge.className = "due " + (node.urgency || "later") + (node.due ? "" : " inherited");
+    badge.textContent = when(node.days_left);
+    badge.title = node.effective_due + (node.due ? "" : "  " + t("cal.inherited"));
+    return badge;
+  }
+
   /* ---------- the task editor ---------- */
 
   var editor, edTargetId = null;
@@ -1258,6 +1411,7 @@
     document.getElementById("edName").value = node ? node.name : "";
     document.getElementById("edNote").value = node ? node.note : "";
     document.getElementById("edPri").value = node ? node.priority : 5;
+    document.getElementById("edDue").value = node && node.due ? node.due : "";
 
     var areaSel = document.getElementById("edArea");
     areaSel.innerHTML = "";
@@ -1328,11 +1482,13 @@
     var area = document.getElementById("edArea").value;
     var note = oneLine(document.getElementById("edNote").value);
     var priority = Math.max(0, Math.min(255, Number(document.getElementById("edPri").value) || 0));
+    var due = document.getElementById("edDue").value.trim();
     var wanted = chosenPrereqs();
     var lines = [];
 
     if (!edTargetId) {
       var line = "add " + quote(name) + " in " + area + " pri " + priority;
+      if (due) line += " due " + due;
       if (wanted.length) line += " after " + wanted.join(", ");
       if (note) line += " note " + quote(note);
       lines.push(line);
@@ -1341,6 +1497,7 @@
       if (node.name !== name) lines.push("rename " + edTargetId + " " + quote(name));
       if (node.note !== note) lines.push("note " + edTargetId + " " + quote(note));
       if (node.priority !== priority) lines.push("pri " + edTargetId + " " + priority);
+      if ((node.due || "") !== due) lines.push("due " + edTargetId + " " + (due || "none"));
       if (node.area !== area) lines.push("move " + edTargetId + " in " + area);
       node.prereqs.forEach(function (had) {
         if (wanted.indexOf(had) === -1) lines.push("unlink " + edTargetId + " after " + had);
@@ -1473,6 +1630,8 @@
     palOut = document.getElementById("palOut");
     palSugg = document.getElementById("palSugg");
     queueEl = document.getElementById("queue");
+    calendarEl = document.getElementById("calendar");
+    calBtn = document.getElementById("calBtn");
     queueBtn = document.getElementById("queueBtn");
     qInput = document.getElementById("q");
     searchWrap = document.getElementById("searchWrap");
@@ -1505,6 +1664,10 @@
     queueBtn.addEventListener("click", function () { toggleQueue(); });
     document.getElementById("qClose").addEventListener("click", function () {
       toggleQueue(false);
+    });
+    calBtn.addEventListener("click", function () { toggleCalendar(); });
+    document.getElementById("calClose").addEventListener("click", function () {
+      toggleCalendar(false);
     });
     document.getElementById("allBtn").addEventListener("click", function () {
       state.focus = null;
@@ -1579,7 +1742,11 @@
     var show = on === undefined ? queueEl.hidden : on;
     queueEl.hidden = !show;
     queueBtn.setAttribute("aria-pressed", String(show));
-    if (show) paintQueue();
+    if (show) {
+      calendarEl.hidden = true;
+      calBtn.setAttribute("aria-pressed", "false");
+      paintQueue();
+    }
   }
 
   function onKey(ev) {
@@ -1595,6 +1762,7 @@
     if (ev.key === "Escape") {
       if (typing) { qInput.value = ""; state.query = ""; updateEmphasis(); qInput.blur(); }
       else if (!queueEl.hidden) toggleQueue(false);
+      else if (!calendarEl.hidden) toggleCalendar(false);
       else select(null);
       return;
     }
@@ -1610,6 +1778,7 @@
     else if (key === "e" && state.selected) openEditor(state.selected);
     else if (key === "f") fit();
     else if (key === "q") toggleQueue();
+    else if (key === "c") toggleCalendar();
     else if (key === "u") undo();
     else if (key === "s") { paintSettings(); dlg.showModal(); }
     else if (key === "1" || key === "2" || key === "3") {

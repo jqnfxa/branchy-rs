@@ -45,7 +45,11 @@ window.BRANCHY_FIXTURE = {
         "n2"
       ],
       "status": "done",
-      "tier": 0
+      "tier": 0,
+      "due": null,
+      "effective_due": "2026-12-31",
+      "days_left": 102,
+      "urgency": "later"
     },
     {
       "id": "n1",
@@ -61,7 +65,11 @@ window.BRANCHY_FIXTURE = {
         "n3"
       ],
       "status": "done",
-      "tier": 1
+      "tier": 1,
+      "due": null,
+      "effective_due": "2026-12-31",
+      "days_left": 102,
+      "urgency": "later"
     },
     {
       "id": "n2",
@@ -77,7 +85,11 @@ window.BRANCHY_FIXTURE = {
         "n3"
       ],
       "status": "done",
-      "tier": 1
+      "tier": 1,
+      "due": null,
+      "effective_due": "2026-12-31",
+      "days_left": 102,
+      "urgency": "later"
     },
     {
       "id": "n3",
@@ -94,7 +106,11 @@ window.BRANCHY_FIXTURE = {
         "n11"
       ],
       "status": "available",
-      "tier": 2
+      "tier": 2,
+      "due": null,
+      "effective_due": "2026-12-31",
+      "days_left": 102,
+      "urgency": "later"
     },
     {
       "id": "n4",
@@ -109,7 +125,11 @@ window.BRANCHY_FIXTURE = {
         "n10"
       ],
       "status": "done",
-      "tier": 0
+      "tier": 0,
+      "due": null,
+      "effective_due": "2026-09-18",
+      "days_left": -2,
+      "urgency": "overdue"
     },
     {
       "id": "n5",
@@ -126,7 +146,11 @@ window.BRANCHY_FIXTURE = {
         "n7"
       ],
       "status": "done",
-      "tier": 1
+      "tier": 1,
+      "due": null,
+      "effective_due": "2026-09-18",
+      "days_left": -2,
+      "urgency": "overdue"
     },
     {
       "id": "n6",
@@ -142,7 +166,11 @@ window.BRANCHY_FIXTURE = {
         "n11"
       ],
       "status": "available",
-      "tier": 2
+      "tier": 2,
+      "due": "2026-09-18",
+      "effective_due": "2026-09-18",
+      "days_left": -2,
+      "urgency": "overdue"
     },
     {
       "id": "n7",
@@ -158,7 +186,11 @@ window.BRANCHY_FIXTURE = {
         "n11"
       ],
       "status": "available",
-      "tier": 2
+      "tier": 2,
+      "due": null,
+      "effective_due": "2026-12-31",
+      "days_left": 102,
+      "urgency": "later"
     },
     {
       "id": "n8",
@@ -172,7 +204,11 @@ window.BRANCHY_FIXTURE = {
         "n9"
       ],
       "status": "done",
-      "tier": 0
+      "tier": 0,
+      "due": null,
+      "effective_due": null,
+      "days_left": null,
+      "urgency": null
     },
     {
       "id": "n9",
@@ -186,7 +222,11 @@ window.BRANCHY_FIXTURE = {
       ],
       "dependents": [],
       "status": "available",
-      "tier": 1
+      "tier": 1,
+      "due": null,
+      "effective_due": null,
+      "days_left": null,
+      "urgency": null
     },
     {
       "id": "n10",
@@ -202,7 +242,11 @@ window.BRANCHY_FIXTURE = {
         "n18"
       ],
       "status": "available",
-      "tier": 1
+      "tier": 1,
+      "due": null,
+      "effective_due": null,
+      "days_left": null,
+      "urgency": null
     },
     {
       "id": "n11",
@@ -220,7 +264,11 @@ window.BRANCHY_FIXTURE = {
         "n20"
       ],
       "status": "locked",
-      "tier": 3
+      "tier": 3,
+      "due": "2026-12-31",
+      "effective_due": "2026-12-31",
+      "days_left": 102,
+      "urgency": "later"
     },
     {
       "id": "n12",
@@ -234,7 +282,11 @@ window.BRANCHY_FIXTURE = {
         "n15"
       ],
       "status": "done",
-      "tier": 0
+      "tier": 0,
+      "due": null,
+      "effective_due": "2027-06-01",
+      "days_left": 254,
+      "urgency": "later"
     },
     {
       "id": "n13",
@@ -248,7 +300,11 @@ window.BRANCHY_FIXTURE = {
         "n16"
       ],
       "status": "done",
-      "tier": 0
+      "tier": 0,
+      "due": null,
+      "effective_due": "2027-06-01",
+      "days_left": 254,
+      "urgency": "later"
     },
     {
       "id": "n14",
@@ -262,7 +318,11 @@ window.BRANCHY_FIXTURE = {
         "n15"
       ],
       "status": "available",
-      "tier": 0
+      "tier": 0,
+      "due": null,
+      "effective_due": "2027-06-01",
+      "days_left": 254,
+      "urgency": "later"
     },
     {
       "id": "n15",
@@ -279,7 +339,11 @@ window.BRANCHY_FIXTURE = {
         "n16"
       ],
       "status": "locked",
-      "tier": 1
+      "tier": 1,
+      "due": null,
+      "effective_due": "2027-06-01",
+      "days_left": 254,
+      "urgency": "later"
     },
     {
       "id": "n16",
@@ -294,7 +358,11 @@ window.BRANCHY_FIXTURE = {
       ],
       "dependents": [],
       "status": "locked",
-      "tier": 2
+      "tier": 2,
+      "due": "2027-06-01",
+      "effective_due": "2027-06-01",
+      "days_left": 254,
+      "urgency": "later"
     },
     {
       "id": "n17",
@@ -309,7 +377,11 @@ window.BRANCHY_FIXTURE = {
         "n19"
       ],
       "status": "done",
-      "tier": 0
+      "tier": 0,
+      "due": null,
+      "effective_due": null,
+      "days_left": null,
+      "urgency": null
     },
     {
       "id": "n18",
@@ -326,7 +398,11 @@ window.BRANCHY_FIXTURE = {
         "n20"
       ],
       "status": "locked",
-      "tier": 2
+      "tier": 2,
+      "due": null,
+      "effective_due": null,
+      "days_left": null,
+      "urgency": null
     },
     {
       "id": "n19",
@@ -340,7 +416,11 @@ window.BRANCHY_FIXTURE = {
       ],
       "dependents": [],
       "status": "available",
-      "tier": 1
+      "tier": 1,
+      "due": null,
+      "effective_due": null,
+      "days_left": null,
+      "urgency": null
     },
     {
       "id": "n20",
@@ -355,14 +435,18 @@ window.BRANCHY_FIXTURE = {
       ],
       "dependents": [],
       "status": "locked",
-      "tier": 4
+      "tier": 4,
+      "due": null,
+      "effective_due": null,
+      "days_left": null,
+      "urgency": null
     }
   ],
   "queue": [
     "n6",
     "n3",
-    "n14",
     "n7",
+    "n14",
     "n10",
     "n9",
     "n19"
@@ -371,7 +455,9 @@ window.BRANCHY_FIXTURE = {
   "tally": {
     "total": 21,
     "done": 9,
-    "available": 7
-  }
+    "available": 7,
+    "overdue": 1
+  },
+  "today": "2026-09-20"
 }
 ;
