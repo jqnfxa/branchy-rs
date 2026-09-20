@@ -7,6 +7,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::date::Date;
 use crate::error::Error;
 use crate::graph::Graph;
 use crate::id::{AreaId, NodeId};
@@ -64,6 +65,8 @@ pub enum Command {
         area: AreaId,
         /// Higher sorts earlier in the queue.
         priority: u8,
+        /// When it has to be finished by.
+        due: Option<Date>,
         /// Existing nodes the new one will need.
         prereqs: BTreeSet<NodeId>,
         /// Existing nodes that will need the new one.
@@ -87,6 +90,13 @@ pub enum Command {
         node: NodeId,
         /// The new value.
         done: bool,
+    },
+    /// Set or clear a node's deadline.
+    SetDue {
+        /// The node.
+        node: NodeId,
+        /// The new deadline, or `None` to clear it.
+        due: Option<Date>,
     },
     /// Change a node's priority.
     SetPriority {
@@ -211,6 +221,7 @@ impl Graph {
                 note,
                 area,
                 priority,
+                due,
                 prereqs,
                 dependents,
             } => {
@@ -224,7 +235,8 @@ impl Graph {
                 let id = self.add_node(
                     NewNode::new(name, area)
                         .with_note(note)
-                        .with_priority(priority),
+                        .with_priority(priority)
+                        .with_due(due),
                 )?;
                 for prereq in &prereqs {
                     self.add_prerequisite_unchecked(id, *prereq)?;
@@ -277,6 +289,16 @@ impl Graph {
                     node: Some(node),
                     area: None,
                     undo: vec![Command::SetDone { node, done: was }],
+                })
+            }
+
+            Command::SetDue { node, due } => {
+                let was = self.require(node)?.due;
+                self.set_due(node, due)?;
+                Ok(Applied {
+                    node: Some(node),
+                    area: None,
+                    undo: vec![Command::SetDue { node, due: was }],
                 })
             }
 

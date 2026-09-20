@@ -52,6 +52,7 @@
 //! ```
 
 mod command;
+mod date;
 mod error;
 mod graph;
 mod id;
@@ -59,6 +60,7 @@ mod node;
 mod parse;
 
 pub use command::{Applied, Command};
+pub use date::Date;
 pub use error::Error;
 pub use graph::Graph;
 pub use id::{AreaId, NodeId};

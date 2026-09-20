@@ -54,6 +54,7 @@ fn add_node_command_reports_the_new_id() {
             note: "limits".into(),
             area,
             priority: 7,
+            due: None,
             prereqs: [].into(),
             dependents: [].into(),
         })
@@ -75,6 +76,7 @@ fn add_node_can_wire_itself_up_in_one_step() {
             note: String::new(),
             area,
             priority: 5,
+            due: None,
             prereqs: [ids[0]].into(),
             dependents: [ids[1]].into(),
         })
@@ -98,6 +100,7 @@ fn add_node_that_would_close_a_loop_creates_nothing() {
             note: String::new(),
             area,
             priority: 5,
+            due: None,
             prereqs: [ids[1]].into(),
             dependents: [ids[0]].into(),
         })
@@ -117,6 +120,7 @@ fn add_node_referring_to_a_missing_node_is_refused() {
             note: String::new(),
             area,
             priority: 5,
+            due: None,
             prereqs: [ghost].into(),
             dependents: [].into(),
         })
@@ -171,6 +175,7 @@ fn undo_of_add_node_removes_it_again() {
             note: String::new(),
             area,
             priority: 5,
+            due: None,
             prereqs: [ids[0]].into(),
             dependents: [].into(),
         })
@@ -187,6 +192,7 @@ fn undo_of_add_node_removes_it_again() {
             note: String::new(),
             area,
             priority: 5,
+            due: None,
             prereqs: [].into(),
             dependents: [].into(),
         })
@@ -234,6 +240,7 @@ fn a_sequence_undoes_in_reverse() {
                 note: String::new(),
                 area,
                 priority: 1,
+                due: None,
                 prereqs: [].into(),
                 dependents: [].into(),
             },
@@ -242,6 +249,7 @@ fn a_sequence_undoes_in_reverse() {
                 note: String::new(),
                 area,
                 priority: 2,
+                due: None,
                 prereqs: [].into(),
                 dependents: [].into(),
             },

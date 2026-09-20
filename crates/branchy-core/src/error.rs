@@ -42,6 +42,8 @@ pub enum Error {
     /// This node can never be unlocked, because a cycle sits between it and the
     /// nodes it depends on.
     CycleBlocks(NodeId),
+    /// A date the calendar does not have, or one not written as `YYYY-MM-DD`.
+    BadDate(String),
 }
 
 impl std::fmt::Display for Error {
@@ -74,6 +76,7 @@ impl std::fmt::Display for Error {
                 write!(f, "area {area} still holds {nodes} node(s)")
             }
             Self::CycleBlocks(id) => write!(f, "{id} is blocked by a dependency cycle"),
+            Self::BadDate(text) => write!(f, "not a date: {text}, expected YYYY-MM-DD"),
         }
     }
 }

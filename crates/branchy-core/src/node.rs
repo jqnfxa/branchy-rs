@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::date::Date;
 use crate::id::{AreaId, NodeId};
 
 /// A user-defined grouping with its own accent colour: hard skills, health,
@@ -51,6 +52,12 @@ pub struct Node {
     pub priority: u8,
     /// Whether the task is finished. The only stored part of a node's status.
     pub done: bool,
+    /// When this has to be finished by, if anything says so.
+    ///
+    /// A deadline does not change a node's status: a task is not blocked by
+    /// having a date on it. What it changes is urgency, and it reaches
+    /// backwards — see [`Graph::effective_due`](crate::Graph::effective_due).
+    pub due: Option<Date>,
     /// Everything that must be done before this becomes available.
     ///
     /// A set rather than a list: duplicate edges are impossible by
@@ -72,6 +79,8 @@ pub struct NewNode {
     pub area: AreaId,
     /// Higher sorts earlier in the queue.
     pub priority: u8,
+    /// When it has to be finished by.
+    pub due: Option<Date>,
 }
 
 impl NewNode {
@@ -83,7 +92,15 @@ impl NewNode {
             note: String::new(),
             area,
             priority: 5,
+            due: None,
         }
+    }
+
+    /// Sets the deadline.
+    #[must_use]
+    pub const fn with_due(mut self, due: Option<Date>) -> Self {
+        self.due = due;
+        self
     }
 
     /// Sets the note.

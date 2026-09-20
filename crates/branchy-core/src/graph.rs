@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use crate::date::Date;
 use crate::error::Error;
 use crate::id::{AreaId, NodeId};
 use crate::node::{Area, NewArea, NewNode, Node, Status};
@@ -137,6 +138,7 @@ impl Graph {
                 area: draft.area,
                 priority: draft.priority,
                 done: false,
+                due: draft.due,
                 prereqs: BTreeSet::new(),
             },
         );
@@ -190,6 +192,16 @@ impl Graph {
     /// [`Error::NoSuchNode`] if there is no such node.
     pub fn set_done(&mut self, id: NodeId, done: bool) -> Result<(), Error> {
         self.node_mut(id)?.done = done;
+        Ok(())
+    }
+
+    /// Sets or clears a node's deadline.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoSuchNode`] if there is no such node.
+    pub fn set_due(&mut self, id: NodeId, due: Option<Date>) -> Result<(), Error> {
+        self.node_mut(id)?.due = due;
         Ok(())
     }
 
@@ -466,12 +478,62 @@ impl Graph {
         self.statuses().get(&id).copied()
     }
 
-    /// Every available node, highest priority first.
+    /// The deadline every node is really working to, in id order.
+    ///
+    /// A deadline reaches backwards. If a goal is due in March then everything
+    /// it depends on is due in March too, whether or not anybody wrote that
+    /// down, and the earliest such date wins when several dependents disagree.
+    /// That propagation is the whole reason a deadline is worth recording on a
+    /// graph rather than on a list.
+    ///
+    /// Nodes tangled in a cycle keep whatever date was set on them directly and
+    /// propagate nothing, because there is no order in which to do it.
+    #[must_use]
+    pub fn effective_due(&self) -> BTreeMap<NodeId, Date> {
+        let mut out: BTreeMap<NodeId, Date> = self
+            .nodes
+            .iter()
+            .filter_map(|(id, node)| node.due.map(|due| (*id, due)))
+            .collect();
+
+        // deepest first, so a node is always settled before its prerequisites
+        let tiers = self.tiers();
+        let mut order: Vec<(u32, NodeId)> = tiers.iter().map(|(id, t)| (*t, *id)).collect();
+        order.sort_unstable_by(|a, b| b.cmp(a));
+
+        for (_, id) in order {
+            let Some(due) = out.get(&id).copied() else {
+                continue;
+            };
+            let Some(node) = self.nodes.get(&id) else {
+                continue;
+            };
+            for prereq in &node.prereqs {
+                let slot = out.entry(*prereq).or_insert(due);
+                if due < *slot {
+                    *slot = due;
+                }
+            }
+        }
+        out
+    }
+
+    /// Every available node, most urgent first.
     ///
     /// This is the queue view: a projection of the graph rather than a separate
-    /// list. Ties break by name and then by id, so the order is stable.
+    /// list.
+    ///
+    /// A deadline outranks a priority, because a number somebody chose once
+    /// should not outweigh a date the world imposed. Sorting by date ascending
+    /// puts the most overdue first without the graph ever needing to know what
+    /// day it is. Nodes with no deadline come after those that have one, and
+    /// fall back to priority — so on a graph with no dates at all, this is
+    /// exactly the priority order it always was.
+    ///
+    /// Ties break by name and then by id, so the order is stable.
     #[must_use]
     pub fn queue(&self) -> Vec<NodeId> {
+        let due = self.effective_due();
         let mut out: Vec<NodeId> = self
             .statuses()
             .into_iter()
@@ -482,11 +544,15 @@ impl Graph {
         out.sort_by(|a, b| {
             let left = &self.nodes[a];
             let right = &self.nodes[b];
-            right
-                .priority
-                .cmp(&left.priority)
-                .then_with(|| left.name.cmp(&right.name))
-                .then_with(|| a.cmp(b))
+            match (due.get(a), due.get(b)) {
+                (Some(x), Some(y)) => x.cmp(y),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+            .then_with(|| right.priority.cmp(&left.priority))
+            .then_with(|| left.name.cmp(&right.name))
+            .then_with(|| a.cmp(b))
         });
         out
     }

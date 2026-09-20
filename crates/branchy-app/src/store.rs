@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use branchy_core::{Area, AreaId, Command, Graph, Node, NodeId};
+use branchy_core::{Area, AreaId, Command, Date, Graph, Node, NodeId};
 use serde::{Deserialize, Serialize};
 
 /// Bumped when the shape changes in a way an older reader could not cope with.
@@ -47,6 +47,9 @@ struct NodeRecord {
     area: u64,
     priority: u8,
     done: bool,
+    /// Absent in documents written before deadlines existed, hence the default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    due: Option<String>,
     #[serde(default)]
     prereqs: Vec<u64>,
 }
@@ -127,6 +130,7 @@ impl Document {
                     area: node.area.raw(),
                     priority: node.priority,
                     done: node.done,
+                    due: node.due.map(|date| date.to_string()),
                     prereqs: node.prereqs.iter().copied().map(NodeId::raw).collect(),
                 })
                 .collect(),
@@ -173,6 +177,10 @@ impl Document {
                     area: AreaId::new(record.area),
                     priority: record.priority,
                     done: record.done,
+                    due: match record.due {
+                        Some(text) => Some(text.parse::<Date>()?),
+                        None => None,
+                    },
                     prereqs: BTreeSet::new(),
                 }),
                 dependents: BTreeSet::new(),

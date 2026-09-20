@@ -5,7 +5,8 @@
 //! other.
 //!
 //! ```text
-//! add <name> [in <area>] [after a, b] [before c] [pri n] [note "..."]
+//! add <name> [in <area>] [after a, b] [before c] [pri n] [note "..."] [due YYYY-MM-DD]
+//! due <task> <YYYY-MM-DD | none>
 //! done <task>            undone <task>
 //! link <a> after <b>     link <a> before <b>     unlink <a> after <b>
 //! rm <task>              pri <task> <n>          rename <task> <name>
@@ -21,6 +22,7 @@
 use std::collections::BTreeSet;
 
 use crate::command::Command;
+use crate::date::Date;
 use crate::graph::Graph;
 use crate::id::{AreaId, NodeId};
 
@@ -42,6 +44,8 @@ pub enum ParseError {
     MissingSeparator,
     /// A priority was expected and the word was not a number in range.
     BadPriority(String),
+    /// A deadline was expected and the word was not a date.
+    BadDate(String),
     /// Nothing matched this task reference.
     NoSuchTask(String),
     /// Several tasks matched this reference.
@@ -73,6 +77,9 @@ impl std::fmt::Display for ParseError {
             Self::MissingTask => write!(f, "name a task"),
             Self::MissingSeparator => write!(f, "needs two tasks: link A after B"),
             Self::BadPriority(word) => write!(f, "priority has to be 0-255, not {word}"),
+            Self::BadDate(word) => {
+                write!(f, "{word} is not a date, expected YYYY-MM-DD or none")
+            }
             Self::NoSuchTask(query) => write!(f, "no task matches {query}"),
             Self::AmbiguousTask { query, matches } => {
                 write!(f, "{query} matches {} tasks", matches.len())
@@ -88,8 +95,8 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-const KEYWORDS: [&str; 8] = [
-    "in", "after", "needs", "before", "blocks", "pri", "priority", "note",
+const KEYWORDS: [&str; 9] = [
+    "in", "after", "needs", "before", "blocks", "pri", "priority", "note", "due",
 ];
 
 fn is_keyword(word: &str) -> bool {
@@ -240,6 +247,7 @@ pub fn parse(graph: &Graph, input: &str) -> Result<Command, ParseError> {
         }),
         "rm" | "del" | "delete" => Ok(Command::RemoveNode(resolve_node(graph, &join(rest))?)),
         "pri" | "priority" => parse_priority(graph, rest),
+        "due" => parse_due(graph, rest),
         "rename" => parse_two_part(rest).map_or(Err(ParseError::MissingTask), |(who, what)| {
             Ok(Command::SetName {
                 node: resolve_node(graph, &who)?,
@@ -299,6 +307,28 @@ fn parse_priority(graph: &Graph, tokens: &[String]) -> Result<Command, ParseErro
     Ok(Command::SetPriority {
         node: resolve_node(graph, &join(head))?,
         priority,
+    })
+}
+
+/// `due <task> 2026-12-31`, or `due <task> none` to take the date off.
+fn parse_due(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
+    let Some((last, head)) = tokens.split_last() else {
+        return Err(ParseError::MissingTask);
+    };
+    if head.is_empty() {
+        return Err(ParseError::MissingTask);
+    }
+    let due = if last.eq_ignore_ascii_case("none") || last.eq_ignore_ascii_case("never") {
+        None
+    } else {
+        Some(
+            last.parse::<Date>()
+                .map_err(|_| ParseError::BadDate(last.clone()))?,
+        )
+    };
+    Ok(Command::SetDue {
+        node: resolve_node(graph, &join(head))?,
+        due,
     })
 }
 
@@ -390,6 +420,7 @@ fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
     let mut before: Vec<String> = Vec::new();
     let mut priority: u8 = 5;
     let mut note = String::new();
+    let mut due: Option<Date> = None;
 
     while at < tokens.len() {
         let keyword = tokens[at].to_ascii_lowercase();
@@ -403,6 +434,13 @@ fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
         match keyword.as_str() {
             "in" => area_ref = Some(join(values)),
             "note" => note = values.join(" "),
+            "due" => {
+                let word = values.first().cloned().unwrap_or_default();
+                due = Some(
+                    word.parse::<Date>()
+                        .map_err(|_| ParseError::BadDate(word))?,
+                );
+            }
             "after" | "needs" => after.extend(split_list(values)),
             "before" | "blocks" => before.extend(split_list(values)),
             _ => {
@@ -440,6 +478,7 @@ fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
         note,
         area,
         priority,
+        due,
         prereqs,
         dependents,
     })
