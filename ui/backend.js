@@ -50,6 +50,10 @@
   }
 
   global.Branchy = global.Branchy || {};
+  // `window.__TAURI__` exists only because tauri.conf.json sets
+  // `app.withGlobalTauri`. Without it the API is reachable only through an npm
+  // import, which would mean a bundler, which this frontend deliberately has
+  // no room for.
   global.Branchy.connect = function () {
     var tauri = global.__TAURI__;
     if (tauri && tauri.core && typeof tauri.core.invoke === "function") {

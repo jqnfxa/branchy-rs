@@ -1,10 +1,13 @@
-# Rust
+# Rust. The desktop shell is its own workspace, so it has its own target dir.
 /target
+/src-tauri/target
 **/*.rs.bk
 
-# Frontend tooling (once the Tauri shell exists)
+# Frontend tooling. The frontend in ui/ has no build step, but the Android
+# target and any future tooling would put artefacts here.
 node_modules/
 dist/
+/src-tauri/gen/
 
 # Real task data must never land in this public repo
 *.automerge

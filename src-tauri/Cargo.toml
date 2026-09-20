@@ -1,0 +1,33 @@
+# Its own workspace on purpose: see the exclude in the root manifest.
+[workspace]
+
+[package]
+name = "branchy-desktop"
+description = "Branchy desktop shell"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jqnfxa/branchy-rs"
+publish = false
+
+[[bin]]
+name = "branchy-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+branchy-app = { path = "../crates/branchy-app" }
+branchy-core = { path = "../crates/branchy-core" }
+serde_json = "1.0.151"
+tauri = { version = "2", features = [] }
+
+# Mirrors the root workspace's lints, which cannot be inherited from here.
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }

@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/branchy-app", "crates/branchy-cli", "crates/branchy-core"]
+# The desktop shell is its own workspace: pulling it in would make every
+# `cargo check` need the platform webview libraries, on every CI runner.
+exclude = ["src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
