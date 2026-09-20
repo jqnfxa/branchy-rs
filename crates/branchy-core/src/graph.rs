@@ -67,6 +67,30 @@ impl Graph {
         self.areas.len()
     }
 
+    /// Renames an area.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoSuchArea`] if there is no such area.
+    pub fn set_area_name(&mut self, id: AreaId, name: impl Into<String>) -> Result<(), Error> {
+        self.area_mut(id)?.name = name.into();
+        Ok(())
+    }
+
+    /// Changes an area's accent colour.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoSuchArea`] if there is no such area.
+    pub fn set_area_color(&mut self, id: AreaId, color: impl Into<String>) -> Result<(), Error> {
+        self.area_mut(id)?.color = color.into();
+        Ok(())
+    }
+
+    fn area_mut(&mut self, id: AreaId) -> Result<&mut Area, Error> {
+        self.areas.get_mut(&id).ok_or(Error::NoSuchArea(id))
+    }
+
     /// Removes an empty area.
     ///
     /// # Errors

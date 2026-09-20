@@ -26,6 +26,20 @@ pub enum Command {
         /// Accent colour.
         color: String,
     },
+    /// Rename an area.
+    SetAreaName {
+        /// The area.
+        area: AreaId,
+        /// The new name.
+        name: String,
+    },
+    /// Change an area's accent colour.
+    SetAreaColor {
+        /// The area.
+        area: AreaId,
+        /// The new colour.
+        color: String,
+    },
     /// Remove an area that holds no nodes.
     RemoveArea(AreaId),
     /// Put a removed area back at its original id.
@@ -151,6 +165,26 @@ impl Graph {
                     node: None,
                     area: Some(id),
                     undo: vec![Command::RemoveArea(id)],
+                })
+            }
+
+            Command::SetAreaName { area, name } => {
+                let was = self.require_area(area)?.name.clone();
+                self.set_area_name(area, name)?;
+                Ok(Applied {
+                    node: None,
+                    area: Some(area),
+                    undo: vec![Command::SetAreaName { area, name: was }],
+                })
+            }
+
+            Command::SetAreaColor { area, color } => {
+                let was = self.require_area(area)?.color.clone();
+                self.set_area_color(area, color)?;
+                Ok(Applied {
+                    node: None,
+                    area: Some(area),
+                    undo: vec![Command::SetAreaColor { area, color: was }],
                 })
             }
 
@@ -360,6 +394,10 @@ impl Graph {
 
     fn require(&self, id: NodeId) -> Result<&Node, Error> {
         self.node(id).ok_or(Error::NoSuchNode(id))
+    }
+
+    fn require_area(&self, id: AreaId) -> Result<&Area, Error> {
+        self.area(id).ok_or(Error::NoSuchArea(id))
     }
 
     /// A new node needing `prereqs` and needed by `dependents` closes a loop

@@ -58,6 +58,12 @@ enum Cmd {
     Unlink(Rest),
     /// Create a direction: area "Hard skills" [#4fd1c5]
     Area(Rest),
+    /// Rename a direction: rename-area <direction> "New name"
+    #[command(name = "rename-area")]
+    RenameArea(Rest),
+    /// Recolour a direction: recolor-area <direction> #4fd1c5
+    #[command(name = "recolor-area", alias = "recolour-area")]
+    RecolorArea(Rest),
     /// Remove an empty direction
     Rmarea(Rest),
     /// Run a raw command line, exactly as the in-app command line would
@@ -165,6 +171,8 @@ fn run(cli: &Cli) -> Result<String, String> {
         Cmd::Link(rest) => line("link", &rest.args),
         Cmd::Unlink(rest) => line("unlink", &rest.args),
         Cmd::Area(rest) => line("area", &rest.args),
+        Cmd::RenameArea(rest) => line("rename-area", &rest.args),
+        Cmd::RecolorArea(rest) => line("recolor-area", &rest.args),
         Cmd::Rmarea(rest) => line("rmarea", &rest.args),
         Cmd::Run(rest) => join(&rest.args),
         Cmd::Queue
@@ -268,8 +276,8 @@ fn join(args: &[String]) -> String {
 }
 
 fn requote(arg: &str) -> String {
-    if arg.is_empty() || arg.chars().any(char::is_whitespace) {
-        format!("\"{}\"", arg.replace('"', "'"))
+    if arg.is_empty() || arg.chars().any(char::is_whitespace) || arg.contains(['"', '\\']) {
+        branchy_core::quote(arg)
     } else {
         arg.to_string()
     }

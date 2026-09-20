@@ -11,6 +11,7 @@
 //! rm <task>              pri <task> <n>          rename <task> <name>
 //! note <task> <text>     move <task> in <area>
 //! area <name> [colour]   rmarea <area>
+//! rename-area <area> <name>                       recolor-area <area> <colour>
 //! ```
 //!
 //! `after` and `needs` are the same word for "blocked by"; `before` and
@@ -98,15 +99,24 @@ fn is_keyword(word: &str) -> bool {
 /// Splits a line into words, keeping anything inside double quotes together.
 ///
 /// An empty pair of quotes produces an empty word, which is how a note or name
-/// is deliberately cleared.
+/// is deliberately cleared. A backslash escapes the character after it, so a
+/// name may contain a quote or a backslash of its own — which matters because
+/// a user interface builds these lines out of whatever someone typed into a
+/// form, and must be able to do so without the line falling apart.
 fn tokenize(input: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut current = String::new();
     let mut quoted = false;
     let mut open = false;
+    let mut escaped = false;
 
     for ch in input.chars() {
-        if ch == '"' {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if ch == '"' {
             open = !open;
             quoted = true;
         } else if !open && ch.is_whitespace() {
@@ -122,6 +132,16 @@ fn tokenize(input: &str) -> Vec<String> {
         out.push(current);
     }
     out
+}
+
+/// Wraps a value so [`tokenize`] gives it back unchanged.
+///
+/// Front ends building a command line from form fields use this rather than
+/// inventing their own quoting.
+#[must_use]
+pub fn quote(value: &str) -> String {
+    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
 }
 
 /// Finds the one node a reference names.
@@ -235,6 +255,22 @@ pub fn parse(graph: &Graph, input: &str) -> Result<Command, ParseError> {
         "move" => parse_move(graph, rest),
         "link" | "unlink" => parse_link(graph, verb == "link", rest),
         "area" => parse_area(rest),
+        "rename-area" => {
+            parse_two_part(rest).map_or(Err(ParseError::MissingTask), |(who, what)| {
+                Ok(Command::SetAreaName {
+                    area: resolve_area(graph, &who)?,
+                    name: what,
+                })
+            })
+        }
+        "recolor-area" | "recolour-area" => {
+            parse_two_part(rest).map_or(Err(ParseError::MissingTask), |(who, what)| {
+                Ok(Command::SetAreaColor {
+                    area: resolve_area(graph, &who)?,
+                    color: what,
+                })
+            })
+        }
         "rmarea" => Ok(Command::RemoveArea(resolve_area(graph, &join(rest))?)),
         other => Err(ParseError::UnknownVerb(other.to_string())),
     }

@@ -475,3 +475,60 @@ fn a_whole_session_typed_out() {
     assert_eq!(path.len(), 1);
     assert_eq!(graph.node(path[0]).expect("exists").name, "Calculus");
 }
+
+// ── directions can be edited, not only created ───────────────────────────
+
+#[test]
+fn an_area_can_be_renamed_and_recoloured() {
+    let (mut graph, area, _) = fixture(&[]);
+
+    let command = parse(&graph, r#"rename-area hard "Deep work""#);
+    let applied = graph.apply(command).expect("area exists");
+    assert_eq!(graph.area(area).expect("exists").name, "Deep work");
+
+    let command = parse(&graph, "recolor-area deep #ef8093");
+    graph.apply(command).expect("area exists");
+    assert_eq!(graph.area(area).expect("exists").color, "#ef8093");
+
+    // and the rename undoes
+    graph.apply_all(applied.undo).expect("undo applies");
+    assert_eq!(graph.area(area).expect("exists").name, "Hard skills");
+}
+
+// ── quoting: a front end builds lines out of form fields ─────────────────
+
+#[test]
+fn a_name_holding_a_quote_survives_the_round_trip() {
+    let (mut graph, area, _) = fixture(&[]);
+    let awkward = r#"Read "Flash Boys" \ notes"#;
+
+    let line = format!("add {} in hard", branchy_core::quote(awkward));
+    let command = parse(&graph, &line);
+    let id = graph
+        .apply(command)
+        .expect("applies")
+        .node
+        .expect("created");
+
+    assert_eq!(graph.node(id).expect("exists").name, awkward);
+    assert_eq!(graph.node(id).expect("exists").area, area);
+}
+
+#[test]
+fn quoting_handles_the_empty_string() {
+    let (mut graph, _, ids) = fixture(&["a"]);
+    let line = format!("note {} {}", ids[0], branchy_core::quote(""));
+    let command = parse(&graph, &line);
+    graph.apply(command).expect("applies");
+    assert_eq!(graph.node(ids[0]).expect("exists").note, "");
+}
+
+#[test]
+fn a_note_with_spaces_and_punctuation_round_trips() {
+    let (mut graph, _, ids) = fixture(&["a"]);
+    let note = "Two a day, until they stop hurting -- then three.";
+    let line = format!("note {} {}", ids[0], branchy_core::quote(note));
+    let command = parse(&graph, &line);
+    graph.apply(command).expect("applies");
+    assert_eq!(graph.node(ids[0]).expect("exists").note, note);
+}
