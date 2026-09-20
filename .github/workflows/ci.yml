@@ -64,3 +64,6 @@ jobs:
       - name: Build
         working-directory: src-tauri
         run: cargo build
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test
