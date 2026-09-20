@@ -31,7 +31,8 @@ Differentiator versus existing apps: cross-cutting dependency gating plus one gr
 
 - Cargo workspace. `crates/branchy-core` is a pure Rust library with no UI or platform dependencies. The Tauri 2 shell goes in `src-tauri/` in phase 2.
 - `branchy-core` holds the graph in ordinary Rust collections and has no persistence of its own. Automerge is a layer behind that boundary, added in phase 3, not the in-memory model. Persisted data lives in an Automerge (CRDT) document. Sync is file based: the document is a binary file in a folder that Syncthing keeps in sync between devices, and the `notify` crate reloads and merges external changes. No server. Syncthing was preferred over Dropbox or iCloud because it is open source and works on Linux and Android. A self-hosted axum server is the fallback if this proves weak.
-- Frontend is a web frontend inside Tauri.
+- Frontend is a web frontend inside Tauri, living in `ui/`. It is plain HTML, CSS and JavaScript with no build step.
+- The interface never recomputes anything about the graph. `branchy-cli`'s `snapshot` module produces one value carrying nodes, areas, statuses, tiers, the queue and any cycles, and the Tauri shell will return the same value from a `snapshot` command. `branchy snapshot` prints it, which is what makes the frontend developable and the app scriptable without a window.
 
 ## Platforms
 
@@ -57,7 +58,11 @@ Consequences that bind every phase:
 
 Done and committed locally: workspace skeleton, rustfmt and clippy config, CI, dual license, README, design concept, commit rules, and two UI prototypes (`docs/prototype/skill-tree.html` is the current one).
 
-**Phase 1 is done and committed.** Nothing is pushed yet.
+**Phase 1 is done and committed. Phase 2 is underway.** Nothing is pushed yet.
+
+The frontend in `ui/` is written and renders real data from a generated fixture. What remains for phase 2 is `src-tauri/`: the shell, its `snapshot`, `execute` and `undo` commands over `branchy-core`, and pointing `frontendDist` at `ui/`. That is blocked on the system libraries listed under open decisions.
+
+No automated tests cover the frontend yet; it is checked by opening `ui/index.html` in a browser.
 
 - `crates/branchy-core` — `id.rs`, `node.rs`, `error.rs`, `graph.rs`, `command.rs`, `parse.rs`. Zero dependencies.
 - `crates/branchy-cli` — the `branchy` binary. Depends on clap, serde, serde_json, directories.
@@ -74,10 +79,18 @@ Invariants worth not breaking:
 
 ## Open decisions
 
-- Frontend technology: plain HTML/CSS/JS, or a Rust-to-wasm framework such as Leptos. Decide before phase 2.
+- ~~Frontend technology.~~ Settled on 2026-09-20: **plain HTML, CSS and JavaScript in `ui/`, no framework and no build step.** Tauri serves the directory as it is, so there is no npm install or bundler in CI and nothing extra to make work on Android. The main view is hand-drawn SVG, where a framework's diffing buys very little. Leptos would add a wasm toolchain and a second compile target to a project whose point is shipping.
 - Whether the core crate should keep the name `branchy-core` or be named `branchy-rs`. `branchy-core` was chosen so the repo name can stay the umbrella.
 - ~~Node id type, area representation, priority representation.~~ Settled: `NodeId`/`AreaId` are newtypes over `u64` handed out by the graph, areas are one field on a node in a single graph, priority is a `u8` where higher sorts earlier.
-- Tauri prerequisites on this Linux machine (WebKitGTK and friends). Verify before phase 2.
+- **Blocked:** Tauri cannot build on this machine yet. `webkit2gtk-4.1`, `javascriptcoregtk-4.1`, `libsoup-3.0`, `libxdo`, `librsvg-2.0` and `ayatana-appindicator3-0.1` are all missing; `gtk+-3.0`, `openssl`, `cc`, `pkg-config`, `node` and `npm` are present. Needs root, so the developer runs it:
+
+  ```sh
+  sudo apt install libwebkit2gtk-4.1-dev libsoup-3.0-dev libxdo-dev \
+                   librsvg2-dev libayatana-appindicator3-dev \
+                   build-essential curl wget file libssl-dev
+  ```
+
+  Until then `src-tauri/` stays out of the workspace, because a member that cannot compile would break `cargo check --workspace` and CI.
 - Whether "done" is called "unlocked" in the UI skin.
 
 ## Tooling
