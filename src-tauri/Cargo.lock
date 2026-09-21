@@ -150,7 +150,7 @@ dependencies = [
 
 [[package]]
 name = "branchy-app"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "branchy-core",
  "directories",
@@ -160,11 +160,11 @@ dependencies = [
 
 [[package]]
 name = "branchy-core"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "branchy-desktop"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "branchy-app",
  "branchy-core",

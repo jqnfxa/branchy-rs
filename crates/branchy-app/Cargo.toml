@@ -13,7 +13,7 @@ keywords = ["branchy", "todo", "graph", "storage"]
 categories = ["data-structures"]
 
 [dependencies]
-branchy-core = { path = "../branchy-core", version = "0.1.1" }
+branchy-core = { path = "../branchy-core", version = "0.1.2" }
 directories = "6.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"

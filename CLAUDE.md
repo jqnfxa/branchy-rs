@@ -58,7 +58,7 @@ Consequences that bind every phase:
 
 ## Status
 
-**Phases 1 and 2 are done. Published on crates.io as v0.1.0 on 2026-09-21**, and `main` is pushed.
+**Phases 1 and 2 are done.** First published on crates.io as v0.1.0 on 2026-09-21; 0.1.1 and 0.1.2 followed the same day with fixes. Each `v*` tag also publishes the desktop shell as a `.deb` on GitHub Releases (`.github/workflows/release.yml`).
 
 | Crate | Where | What |
 | --- | --- | --- |
