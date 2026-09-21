@@ -122,6 +122,8 @@ pub struct Vaults {
     path: PathBuf,
     recent: Vec<PathBuf>,
     open_last: bool,
+    /// Where an older version kept its graph, if this list may still adopt it.
+    legacy: Option<PathBuf>,
 }
 
 /// One line of the recent list, as a front end shows it.
@@ -136,7 +138,9 @@ pub struct Entry {
 }
 
 impl Entry {
-    fn of(dir: &Path) -> Self {
+    /// Describes a vault's folder, whether or not it is on the list.
+    #[must_use]
+    pub fn of(dir: &Path) -> Self {
         Self {
             name: name_of(dir),
             path: dir.display().to_string(),
@@ -201,6 +205,7 @@ impl Vaults {
             path: path.to_path_buf(),
             recent,
             open_last: record.open_last,
+            legacy: None,
         })
     }
 
@@ -217,12 +222,29 @@ impl Vaults {
     pub fn load_or_adopt(path: &Path, legacy: &Path) -> Result<Self, StoreError> {
         let exists = path.exists();
         let mut list = Self::load(path)?;
+        list.legacy = Some(legacy.to_path_buf());
         if !exists && legacy.join(DOCUMENT).is_file() {
             if let Ok(vault) = Vault::open(legacy) {
                 list.opened(&vault);
             }
         }
         Ok(list)
+    }
+
+    /// Reads the list again from where this one came from.
+    ///
+    /// The terminal changes the list too. Anything that holds on to one for
+    /// longer than a command, as the window does, rereads it before changing
+    /// it, or it would save its stale copy over whatever the terminal did.
+    ///
+    /// # Errors
+    ///
+    /// As [`Vaults::load`].
+    pub fn reload(&self) -> Result<Self, StoreError> {
+        match &self.legacy {
+            Some(legacy) => Self::load_or_adopt(&self.path, legacy),
+            None => Self::load(&self.path),
+        }
     }
 
     /// Writes the list back where it was read from.

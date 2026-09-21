@@ -320,6 +320,23 @@ fn two_recent_vaults_with_one_name_have_to_be_told_apart_by_folder() {
     );
 }
 
+#[test]
+fn a_reload_sees_what_another_front_end_saved() {
+    let scratch = Scratch::new("reload");
+    let window = Vaults::load(&scratch.list()).expect("loads");
+
+    // the terminal opens a vault while the window holds its copy
+    let mut terminal = Vaults::load(&scratch.list()).expect("loads");
+    terminal.opened(&Vault::create(scratch.dir(), "Work").expect("created"));
+    terminal.save().expect("saves");
+
+    assert!(
+        window.recent().is_empty(),
+        "precondition: the copy is stale"
+    );
+    assert_eq!(window.reload().expect("reloads").recent().len(), 1);
+}
+
 // ── upgrading from before vaults ────────────────────────────────────────
 
 #[test]
