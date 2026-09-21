@@ -19,6 +19,7 @@ Personal use first. PC first (Linux and Windows), mobile later.
 ## Try it
 
 ```sh
+cargo run --bin branchy -- vault new Plans           # a folder holding one graph
 cargo run --bin branchy -- area "Hard skills" "#4fd1c5"
 cargo run --bin branchy -- add "School algebra" pri 3
 cargo run --bin branchy -- add "Calculus" after school pri 6
@@ -34,7 +35,9 @@ cargo run --bin branchy -- tree                      # the whole graph
 cargo run --bin branchy -- undo                      # take the last change back
 ```
 
-`after` and `needs` both mean "blocked by"; `before` and `blocks` say the same edge from the other end. Tasks are named by any unambiguous part of their name. `branchy where` prints the document's location, and `--file` points at another one.
+`after` and `needs` both mean "blocked by"; `before` and `blocks` say the same edge from the other end. Tasks are named by any unambiguous part of their name.
+
+A **vault** is a folder holding one graph, as in Obsidian, so separate jobs get separate graphs. `branchy vault` lists the recent ones, and `vault new`, `vault open` and `vault forget` do what they say. The window and the terminal share that list, so both always work in the same vault. `branchy where` prints the document's location.
 
 ## The window
 
@@ -42,7 +45,7 @@ cargo run --bin branchy -- undo                      # take the last change back
 cd src-tauri && cargo build && ./target/debug/branchy-desktop
 ```
 
-The same graph, drawn as a skill tree. Three layouts, a queue and a calendar, search, task and direction editing, and the same command line behind `:` or Ctrl+K.
+It opens on your recent vaults, or straight into the last one if you tick the box. The same graph, drawn as a skill tree. Three layouts, a queue and a calendar, search, task and direction editing, and the same command line behind `:` or Ctrl+K.
 
 ## Stack
 

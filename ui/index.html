@@ -15,6 +15,12 @@
   <header class="topbar">
     <button class="iconbtn dock-toggle" id="dockToggle" aria-label="Directions">&#9776;</button>
     <div class="brand"><span class="dot"></span>Branchy</div>
+    <button class="vault-chip" id="vaultBtn" type="button" hidden>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+        <path d="M1.8 4.2c0-.7.5-1.2 1.2-1.2h3.1l1.5 1.6h5.4c.7 0 1.2.5 1.2 1.2v6.2c0 .7-.5 1.2-1.2 1.2H3c-.7 0-1.2-.5-1.2-1.2z" stroke-linejoin="round"></path>
+      </svg>
+      <span id="vaultName"></span>
+    </button>
 
     <div class="seg" id="layoutSeg" role="group" aria-label="Layout"></div>
 
@@ -107,6 +113,49 @@
 
   <footer class="footer" id="footer"></footer>
 </div>
+
+<!-- What the window shows with no vault open. It sits over the app rather
+     than replacing it, so entering a vault is only a matter of hiding it. -->
+<section class="vaults" id="vaults" hidden aria-labelledby="vRecentTitle">
+  <div class="v-box">
+    <div class="v-brand"><span class="dot"></span>Branchy</div>
+    <div class="v-cols">
+      <div class="v-panel">
+        <h2 id="vRecentTitle"></h2>
+        <ul class="v-list" id="vList"></ul>
+        <p class="v-none" id="vNone" hidden></p>
+        <label class="v-check"><input type="checkbox" id="vOpenLast"><span id="vOpenLastLbl"></span></label>
+      </div>
+      <div class="v-actions">
+        <div class="v-panel">
+          <h3 id="vCreateTitle"></h3>
+          <p id="vCreateBlurb"></p>
+          <div class="field">
+            <label for="vName" id="vNameLbl"></label>
+            <input id="vName" type="text" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label id="vLocLbl"></label>
+            <div class="v-loc">
+              <span class="v-path unset" id="vLoc"></span>
+              <button class="btn" id="vBrowse" type="button"></button>
+            </div>
+            <p class="v-will" id="vWill"></p>
+          </div>
+          <div><button class="btn primary" id="vCreate" type="button" disabled></button></div>
+        </div>
+        <div class="v-panel">
+          <h3 id="vOpenTitle"></h3>
+          <p id="vOpenBlurb"></p>
+          <div><button class="btn" id="vOpenBtn" type="button"></button></div>
+        </div>
+      </div>
+    </div>
+    <!-- buttons rather than a select: a scroll wheel passing over a focused
+         select changes it, and this screen scrolls -->
+    <div class="v-foot" id="vLang" role="group" aria-label="Language"></div>
+  </div>
+</section>
 
 <dialog class="settings" id="settings">
   <div class="set-head">

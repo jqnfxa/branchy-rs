@@ -27,12 +27,52 @@
       undo: function () {
         return invoke("undo");
       },
+
+      // Which vaults exist and which is open are the backend's to say. Each
+      // of these answers with the whole vault view, so the interface never
+      // has to guess what a change did to the list.
+      vaults: function () {
+        return invoke("vaults");
+      },
+      createVault: function (name, parent) {
+        return invoke("vault_create", { name: name, parent: parent });
+      },
+      openVault: function (path) {
+        return invoke("vault_open", { path: path });
+      },
+      closeVault: function () {
+        return invoke("vault_close");
+      },
+      forgetVault: function (path) {
+        return invoke("vault_forget", { path: path });
+      },
+      setOpenLast: function (on) {
+        return invoke("vault_open_last", { on: on });
+      },
+      // resolves to a folder, or to null if the person cancelled
+      pickFolder: function (title) {
+        return invoke("pick_folder", { title: title });
+      },
     };
   }
 
   // Answers from the generated fixture. Mutations are refused rather than
   // faked: a half-implemented copy of the engine would be worse than none.
+  //
+  // The sample is presented as one vault that can be closed and reopened, so
+  // the vault screen can be worked on in a browser too. Creating, forgetting
+  // and picking folders need the real thing.
   function fixtureBackend(fixture) {
+    var sample = { name: "Sample", path: "ui/dev-fixture.js", missing: false };
+    var open = true;
+    function view() {
+      return Promise.resolve({
+        open: open ? sample : null,
+        recent: [sample],
+        open_last: false,
+        pinned: false,
+      });
+    }
     return {
       kind: "fixture",
       readOnly: true,
@@ -42,6 +82,19 @@
       execute: refuse,
       executeAll: refuse,
       undo: refuse,
+      vaults: view,
+      openVault: function () {
+        open = true;
+        return view();
+      },
+      closeVault: function () {
+        open = false;
+        return view();
+      },
+      createVault: refuse,
+      forgetVault: refuse,
+      setOpenLast: refuse,
+      pickFolder: refuse,
     };
   }
 

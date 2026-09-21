@@ -591,6 +591,9 @@ dialog.editor::backdrop{background:rgba(6,8,14,.62);backdrop-filter:blur(3px)}
 .btn.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
 .btn.danger:hover{background:color-mix(in srgb,var(--danger) 12%,transparent)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:focus-visible,.xbtn:focus-visible,.vault-chip:focus-visible,.v-foot button:focus-visible{
+  outline:2px solid var(--a-hard);outline-offset:2px;
+}
 .btn.tiny{padding:5px 9px;font-size:12px}
 
 .empty-state{
@@ -638,3 +641,98 @@ dialog.editor::backdrop{background:rgba(6,8,14,.62);backdrop-filter:blur(3px)}
 .node.is-overdue .disc{stroke:var(--danger)}
 .node.is-overdue .label{fill:var(--danger)}
 .tally .late{color:var(--danger)}
+
+/* ---------- vaults ---------- */
+/* Above the palette, below the toast, so a refusal still shows over it. */
+.vaults{
+  position:fixed;inset:0;z-index:25;overflow-y:auto;
+  display:grid;place-items:center;
+  padding:max(24px,env(safe-area-inset-top,0px)) 16px max(24px,env(safe-area-inset-bottom,0px));
+  background:radial-gradient(ellipse at 50% 28%,var(--stage-glow),var(--bg) 72%);
+}
+.vaults[hidden]{display:none!important}
+.v-box{width:min(880px,100%);display:flex;flex-direction:column;gap:20px}
+.v-brand{
+  display:flex;align-items:center;gap:11px;
+  font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.02em;
+}
+.v-brand .dot{width:10px;height:10px;border-radius:50%;background:var(--a-hard);box-shadow:0 0 12px var(--a-hard)}
+.v-cols{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:start}
+.v-actions{display:flex;flex-direction:column;gap:16px;min-width:0}
+.v-panel{
+  background:var(--bg-elevated);border:1px solid var(--line-soft);border-radius:14px;
+  padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0;
+}
+.v-panel h2{
+  font-size:10.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--text-dim);margin:0;
+}
+.v-panel h3{font-family:var(--display);font-size:16px;font-weight:700;margin:0}
+.v-panel > p{font-size:12.5px;color:var(--text-dim);margin:0;max-width:52ch}
+.v-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.v-item{
+  display:flex;align-items:stretch;
+  background:var(--bg-card);border:1px solid var(--line-soft);border-radius:10px;
+}
+.v-item:hover{border-color:var(--line)}
+.v-open{
+  flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;
+  font:inherit;color:inherit;text-align:start;
+  background:transparent;border:0;border-radius:10px;padding:10px 12px;cursor:pointer;
+}
+.v-open:focus-visible,.v-forget:focus-visible{outline:2px solid var(--a-hard);outline-offset:-2px}
+.v-open .nm{font-family:var(--display);font-size:15px;font-weight:600}
+.v-open .path{
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.v-open .tag{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--danger)}
+.v-item.missing .v-open{cursor:default}
+.v-item.missing .nm,.v-item.missing .path{opacity:.55}
+/* a finger-sized target: this has to work on a phone as well */
+.v-forget{min-width:44px;font-size:18px;border-radius:10px}
+.v-none{font-size:13px;color:var(--text-dim);margin:0}
+.v-check{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer;padding:4px 0;min-height:32px}
+.v-check input{accent-color:var(--a-hard);width:16px;height:16px;flex:none;margin:0}
+/* inside a settings field, where labels are otherwise small caps headings */
+.field > label.v-check{font-size:13px;font-weight:500;letter-spacing:normal;text-transform:none;color:var(--text)}
+.v-loc{display:flex;gap:8px;align-items:center}
+.v-path{
+  flex:1;min-width:0;font-family:var(--mono);font-size:11.5px;
+  padding:9px 10px;background:var(--bg-sunken);border:1px solid var(--line-soft);border-radius:8px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.v-path.unset{font-family:var(--body);font-size:12.5px;color:var(--text-dim)}
+.v-will{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin:0;word-break:break-all;min-height:1.5em}
+.v-foot{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:4px}
+.v-foot button{
+  font:inherit;font-size:12px;color:var(--text-dim);
+  background:transparent;border:1px solid transparent;border-radius:7px;
+  padding:6px 9px;min-height:32px;cursor:pointer;
+}
+.v-foot button:hover{color:var(--text)}
+.v-foot button[aria-pressed="true"]{color:var(--text);border-color:var(--line-soft);background:var(--bg-card)}
+@media (max-width:720px){
+  .v-cols{grid-template-columns:minmax(0,1fr)}
+  .v-brand{font-size:22px}
+}
+
+.vault-chip{
+  display:flex;align-items:center;gap:6px;max-width:200px;min-width:0;
+  font:inherit;font-size:12.5px;font-weight:600;color:var(--text);
+  background:var(--bg-card);border:1px solid var(--line-soft);border-radius:8px;
+  padding:5px 9px;cursor:pointer;
+}
+.vault-chip:hover{border-color:var(--line)}
+.vault-chip svg{flex:none;color:var(--a-hard)}
+.vault-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:580px){.vault-chip{max-width:120px}}
+
+/* the vault section at the top of settings */
+.v-current{display:flex;align-items:center;gap:10px}
+.v-current .info{flex:1;min-width:0}
+.v-current .nm{font-weight:600}
+.v-current .path{
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}

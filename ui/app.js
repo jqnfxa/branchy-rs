@@ -337,7 +337,9 @@
       for (var ring = 0; ring <= (LAY.rings || 0); ring++) {
         gDecor.appendChild(el("circle", { class: "ring", cx: 0, cy: 0, r: K.R0 + ring * K.RING }));
       }
-      gDecor.appendChild(drawHub());
+      // an empty graph shows its empty state there instead, and a progress
+      // ring over nothing would only sit behind that text
+      if (snap.nodes.length) gDecor.appendChild(drawHub());
       LAY.sectors.forEach(function (sector) {
         var label = el("text", {
           x: Math.cos(sector.mid) * sector.r,
@@ -488,7 +490,9 @@
 
   function fitTarget() {
     var ids = Object.keys(LAY.positions);
-    if (!ids.length) return null;
+    // nothing drawn but the hub, as in a vault just created: centre on it,
+    // rather than leaving the camera wherever the last vault had it
+    if (!ids.length) return { k: 1, x: stage.clientWidth / 2, y: stage.clientHeight / 2 };
     var pad = 96;
     var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     ids.forEach(function (id) {
@@ -1085,6 +1089,8 @@
 
   function paintChrome() {
     document.documentElement.lang = langById[state.lang].locale;
+    paintVaultChip();
+    if (!vaultsEl.hidden) paintVaults();
     document.getElementById("lblDirections").textContent = t("directions");
     document.getElementById("allBtn").textContent = t("all");
     document.getElementById("lblKeys").textContent = t("keys");
@@ -1205,6 +1211,7 @@
     var body = document.getElementById("setBody");
     body.innerHTML = "";
     document.getElementById("setTitle").textContent = t("set.title");
+    if (vaultView.open) body.appendChild(vaultSettings());
 
     var field = document.createElement("div");
     field.className = "field";
@@ -1274,6 +1281,57 @@
         paintSettings();
       }
     ));
+  }
+
+  function vaultSettings() {
+    var field = document.createElement("div");
+    field.className = "field";
+    var label = document.createElement("label");
+    label.textContent = t("v.current");
+    field.appendChild(label);
+
+    var row = document.createElement("div");
+    row.className = "v-current";
+    var info = document.createElement("div");
+    info.className = "info";
+    [["nm", vaultView.open.name], ["path", vaultView.open.path]].forEach(function (part) {
+      var line = document.createElement("div");
+      line.className = part[0];
+      line.textContent = part[1];
+      line.title = vaultView.open.path;
+      info.appendChild(line);
+    });
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "btn";
+    close.textContent = t("v.close");
+    close.onclick = function () {
+      dlg.close();
+      switchVault();
+    };
+    row.appendChild(info);
+    row.appendChild(close);
+    field.appendChild(row);
+
+    var check = document.createElement("label");
+    check.className = "v-check";
+    var box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = !!vaultView.open_last;
+    box.onchange = function () { setOpenLast(box.checked); };
+    var text = document.createElement("span");
+    text.textContent = t("v.openLast");
+    check.appendChild(box);
+    check.appendChild(text);
+    field.appendChild(check);
+
+    if (vaultView.pinned) {
+      var help = document.createElement("p");
+      help.className = "help";
+      help.textContent = t("v.pinned");
+      field.appendChild(help);
+    }
+    return field;
   }
 
   function setLang(id) {
@@ -1636,9 +1694,249 @@
     toastTimer = setTimeout(function () { toastEl.hidden = true; }, bad ? 6000 : 2600);
   }
 
+  /* ---------- vaults ---------- */
+
+  // With no vault open the window shows the vault screen: the recent list,
+  // and the two ways to get a new one. Which vaults exist, and which one is
+  // open, is the backend's to say; everything here draws its answer.
+
+  var vaultsEl, vaultChip, vName;
+  var vaultView = { open: null, recent: [], open_last: false, pinned: false };
+  // where a new vault goes, once a folder has been picked for it
+  var newParent = null;
+
+  function failed(error) {
+    toast(message(error), true);
+  }
+
+  function adoptVaults(view) {
+    vaultView = view;
+    paintVaultChip();
+  }
+
+  function showVaultScreen(view) {
+    adoptVaults(view);
+    closeEverything();
+    paintVaults();
+    vaultsEl.hidden = false;
+  }
+
+  // Everything drawn from the last vault is dropped: area ids and selections
+  // mean nothing in another graph.
+  function enterVault(view) {
+    adoptVaults(view);
+    vaultsEl.hidden = true;
+    state.selected = null;
+    state.focus = null;
+    state.visible = {};
+    return refresh().then(function () {
+      fit(0);
+      var loading = document.getElementById("loading");
+      if (loading) loading.remove();
+    });
+  }
+
+  function closeEverything() {
+    [dlg, editor, areaEditor].forEach(function (dialog) {
+      if (dialog.open) dialog.close();
+    });
+    if (!palette.hidden) closePalette();
+    if (!queueEl.hidden) toggleQueue(false);
+    if (!calendarEl.hidden) toggleCalendar(false);
+    if (state.selected) select(null);
+  }
+
+  function switchVault() {
+    backend.closeVault().then(showVaultScreen).catch(failed);
+  }
+
+  function setOpenLast(on) {
+    backend
+      .setOpenLast(on)
+      .then(function (view) {
+        adoptVaults(view);
+        if (!vaultsEl.hidden) paintVaults();
+      })
+      .catch(function (error) {
+        failed(error);
+        if (!vaultsEl.hidden) paintVaults();
+        if (dlg.open) paintSettings();
+      });
+  }
+
+  function paintVaultChip() {
+    var open = vaultView.open;
+    vaultChip.hidden = !open;
+    if (!open) return;
+    document.getElementById("vaultName").textContent = open.name;
+    vaultChip.title = t("v.switch") + " \u2014 " + open.path;
+  }
+
+  function paintVaults() {
+    document.getElementById("vRecentTitle").textContent = t("v.recent");
+    document.getElementById("vOpenLastLbl").textContent = t("v.openLast");
+    document.getElementById("vCreateTitle").textContent = t("v.create");
+    document.getElementById("vCreateBlurb").textContent = t("v.createBlurb");
+    document.getElementById("vNameLbl").textContent = t("v.name");
+    document.getElementById("vLocLbl").textContent = t("v.location");
+    document.getElementById("vBrowse").textContent = t("v.browse");
+    document.getElementById("vCreate").textContent = t("v.createBtn");
+    document.getElementById("vOpenTitle").textContent = t("v.open");
+    document.getElementById("vOpenBlurb").textContent = t("v.openBlurb");
+    document.getElementById("vOpenBtn").textContent = t("v.openBtn");
+
+    var list = document.getElementById("vList");
+    list.innerHTML = "";
+    vaultView.recent.forEach(function (entry) {
+      var item = document.createElement("li");
+      item.className = "v-item" + (entry.missing ? " missing" : "");
+
+      var open = document.createElement("button");
+      open.type = "button";
+      open.className = "v-open";
+      open.title = entry.path;
+      open.disabled = entry.missing;
+      [["nm", entry.name], ["path", entry.path]].forEach(function (part) {
+        var span = document.createElement("span");
+        span.className = part[0];
+        span.textContent = part[1];
+        open.appendChild(span);
+      });
+      if (entry.missing) {
+        var tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = t("v.missing");
+        open.appendChild(tag);
+      }
+      open.onclick = function () {
+        backend.openVault(entry.path).then(enterVault).catch(failed);
+      };
+
+      var forget = document.createElement("button");
+      forget.type = "button";
+      forget.className = "xbtn v-forget";
+      forget.textContent = "\u00d7";
+      forget.title = t("v.forgetTitle");
+      forget.setAttribute("aria-label", t("v.forget") + ": " + entry.name);
+      forget.onclick = function () {
+        backend.forgetVault(entry.path).then(showVaultScreen).catch(failed);
+      };
+
+      item.appendChild(open);
+      item.appendChild(forget);
+      list.appendChild(item);
+    });
+
+    var none = document.getElementById("vNone");
+    none.hidden = vaultView.recent.length > 0;
+    none.textContent = t("v.none");
+    document.getElementById("vOpenLast").checked = !!vaultView.open_last;
+
+    var langs = document.getElementById("vLang");
+    langs.innerHTML = "";
+    LANGS.forEach(function (entry) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.textContent = entry.label;
+      button.setAttribute("aria-pressed", String(entry.id === state.lang));
+      button.onclick = function () { setLang(entry.id); };
+      langs.appendChild(button);
+    });
+    paintNewVault();
+  }
+
+  // The folder a new vault will become, shown before it is created, so a
+  // wrong location is caught while it is still free to change.
+  function paintNewVault() {
+    var name = vName.value.trim();
+    var loc = document.getElementById("vLoc");
+    loc.textContent = newParent || t("v.noLocation");
+    loc.title = newParent || "";
+    loc.classList.toggle("unset", !newParent);
+    document.getElementById("vWill").textContent =
+      name && newParent ? t("v.willCreate", { path: joinPath(newParent, name) }) : "";
+    document.getElementById("vCreate").disabled = !(name && newParent);
+  }
+
+  function joinPath(parent, name) {
+    var windows = parent.indexOf("\\") >= 0 && parent.indexOf("/") < 0;
+    return parent.replace(/[\\/]+$/, "") + (windows ? "\\" : "/") + name;
+  }
+
+  function browseForParent() {
+    backend
+      .pickFolder(t("v.pickParent"))
+      .then(function (folder) {
+        if (!folder) return;
+        newParent = folder;
+        paintNewVault();
+        vName.focus();
+      })
+      .catch(failed);
+  }
+
+  function createVault() {
+    var name = vName.value.trim();
+    if (!name || !newParent) return;
+    backend
+      .createVault(name, newParent)
+      .then(function (view) {
+        vName.value = "";
+        newParent = null;
+        return enterVault(view);
+      })
+      .catch(failed);
+  }
+
+  function openFolder() {
+    backend
+      .pickFolder(t("v.pickFolder"))
+      .then(function (folder) {
+        if (folder) return backend.openVault(folder).then(enterVault);
+      })
+      .catch(failed);
+  }
+
+  // Coming back to the window after using the terminal. The terminal may have
+  // changed the graph, or, on the vault screen, the list.
+  function onFocus() {
+    if (!vaultsEl.hidden) {
+      backend
+        .vaults()
+        .then(function (view) {
+          adoptVaults(view);
+          paintVaults();
+        })
+        .catch(function () {
+          /* the next action reports it */
+        });
+      return;
+    }
+    refreshIfChanged();
+  }
+
+  function wireVaults() {
+    vaultsEl = document.getElementById("vaults");
+    vaultChip = document.getElementById("vaultBtn");
+    vName = document.getElementById("vName");
+
+    vaultChip.onclick = switchVault;
+    vName.addEventListener("input", paintNewVault);
+    vName.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); createVault(); }
+    });
+    document.getElementById("vBrowse").onclick = browseForParent;
+    document.getElementById("vCreate").onclick = createVault;
+    document.getElementById("vOpenBtn").onclick = openFolder;
+    document.getElementById("vOpenLast").onchange = function () {
+      setOpenLast(this.checked);
+    };
+  }
+
   /* ---------- boot ---------- */
 
   function wire() {
+    wireVaults();
     stage = document.getElementById("stage");
     canvas = document.getElementById("canvas");
     inspector = document.getElementById("inspector");
@@ -1768,6 +2066,8 @@
   }
 
   function onKey(ev) {
+    // the graph's shortcuts mean nothing behind the vault screen
+    if (!vaultsEl.hidden) return;
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
       ev.preventDefault();
       if (palette.hidden) openPalette(); else closePalette();
@@ -1818,13 +2118,13 @@
 
     backend = B.connect();
     if (backend.readOnly) bannerEl.hidden = false;
-    window.addEventListener("focus", refreshIfChanged);
+    window.addEventListener("focus", onFocus);
 
-    refresh()
-      .then(function () {
-        fit(0);
-        var loading = document.getElementById("loading");
-        if (loading) loading.remove();
+    backend
+      .vaults()
+      .then(function (view) {
+        if (view.open) return enterVault(view);
+        showVaultScreen(view);
       })
       .catch(function (error) {
         var loading = document.getElementById("loading");
