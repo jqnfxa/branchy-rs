@@ -1,0 +1,86 @@
+name: Release
+
+# A tag like v0.1.1 builds the desktop shell and publishes it as a GitHub
+# release. The crates go to crates.io separately, by hand, because a version
+# there can never be deleted and that is not a step to hand to a bot.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deb:
+    name: .deb
+    # Deliberately not ubuntu-latest. A .deb links against the glibc of the
+    # machine that built it, so one built on 24.04 refuses to start on 22.04 or
+    # Debian 12. Building on the oldest supported base is what makes it run on
+    # everything newer.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install the Linux webview
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            librsvg2-dev libayatana-appindicator3-dev \
+            build-essential curl wget file libssl-dev
+
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: The tag has to match the version being shipped
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          conf=$(grep -m1 '"version"' src-tauri/tauri.conf.json | sed -E 's/.*"([0-9][^"]*)".*/\1/')
+          crate=$(grep -m1 '^version' src-tauri/Cargo.toml | sed -E 's/.*"([^"]*)".*/\1/')
+          echo "tag=$tag tauri.conf.json=$conf src-tauri/Cargo.toml=$crate"
+          if [ "$tag" != "$conf" ] || [ "$tag" != "$crate" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the version in the sources"
+            exit 1
+          fi
+
+      - name: Build
+        working-directory: src-tauri
+        run: cargo tauri build --bundles deb
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Branchy ${{ github.ref_name }}
+          files: src-tauri/target/release/bundle/deb/*.deb
+          fail_on_unmatched_files: true
+          body: |
+            ## Install
+
+            ```sh
+            sudo apt install ./Branchy_${{ github.ref_name }}_amd64.deb
+            ```
+
+            Installing through `apt` rather than `dpkg -i` pulls in the webview libraries the window needs.
+
+            Built on Ubuntu 22.04, so it runs there and on anything newer, including Debian 12.
+
+            The command line on its own, without the window, is on crates.io:
+
+            ```sh
+            cargo install branchy-cli
+            ```
+
+            ## Before you rely on it
+
+            There is no sync between devices yet. Each machine keeps its own document, and putting that file in Syncthing or Dropbox is not safe until sync lands: two devices editing it concurrently produce conflict copies that nothing merges.
+
+            The document is plain JSON at `~/.local/share/branchy/graph.json`. `branchy where` prints it, and `BRANCHY_FILE` points the app at another one.
