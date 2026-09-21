@@ -429,3 +429,77 @@ fn a_brand_new_graph_says_how_to_start_not_to_look_for_cycles() {
     run(&scratch, &["area", "Work", "#4fd1c5"]);
     assert!(run(&scratch, &["queue"]).contains("branchy add"));
 }
+
+// ── a document reached through a symlink ────────────────────────────────
+
+#[cfg(unix)]
+fn link(target: &Path, link: &Path) {
+    std::os::unix::fs::symlink(target, link).expect("symlink");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_save_through_a_symlink_keeps_the_link_and_updates_the_real_file() {
+    let real = Scratch::new("link-real");
+    run(&real, &["area", "Work", "#4fd1c5"]);
+    run(&real, &["add", "Original task"]);
+
+    let via = Scratch::new("link-via");
+    link(real.path(), via.path());
+
+    // write through the link, the way a launcher using the default path would
+    run(&via, &["add", "Added through the link"]);
+
+    let meta = std::fs::symlink_metadata(via.path()).expect("link still there");
+    assert!(
+        meta.file_type().is_symlink(),
+        "the save replaced the link with a regular file"
+    );
+    assert!(
+        run(&real, &["list"]).contains("Added through the link"),
+        "the real file never saw the change: the two have forked"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn undo_through_a_symlink_keeps_the_link_too() {
+    let real = Scratch::new("link-undo-real");
+    run(&real, &["area", "Work", "#4fd1c5"]);
+    run(&real, &["add", "Keep"]);
+
+    let via = Scratch::new("link-undo-via");
+    link(real.path(), via.path());
+    run(&via, &["add", "Take back"]);
+    run(&via, &["undo"]);
+
+    assert!(
+        std::fs::symlink_metadata(via.path())
+            .expect("exists")
+            .file_type()
+            .is_symlink(),
+        "undo replaced the link"
+    );
+    let listing = run(&real, &["list"]);
+    assert!(listing.contains("Keep"));
+    assert!(!listing.contains("Take back"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_to_a_document_that_does_not_exist_yet_creates_the_target() {
+    let real = Scratch::new("link-dangling-real");
+    let via = Scratch::new("link-dangling-via");
+    link(real.path(), via.path());
+    assert!(!real.path().exists(), "precondition: nothing there yet");
+
+    run(&via, &["area", "Work", "#4fd1c5"]);
+
+    assert!(real.path().is_file(), "the target was not created");
+    assert!(
+        std::fs::symlink_metadata(via.path())
+            .expect("exists")
+            .file_type()
+            .is_symlink()
+    );
+}

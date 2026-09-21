@@ -79,7 +79,7 @@ Invariants worth not breaking:
 - Ids are never reused, including after an undone removal. A withdrawn id may already have been seen by another device.
 - Every derived computation terminates on a cyclic graph.
 - The on-disk format lives in `branchy-app/src/store.rs`, written by hand and versioned, never derived from the core's internal layout. New fields are optional with a default, so older documents keep loading. Phase 3 swaps its body for Automerge behind `load` and `save`.
-- Saves are written to a sibling file and renamed over the target. A half-written document is exactly what a sync tool would propagate everywhere.
+- Saves are written to a sibling file and renamed over the target. A half-written document is exactly what a sync tool would propagate everywhere. The target is resolved through symlinks first: renaming over a link replaces the link, and the link and its file then silently fork.
 - `BRANCHY_FILE` wins over the per-user data directory in every front end. That directory comes from `XDG_DATA_HOME` or `HOME`, which sandboxes rewrite, so without the override a snap-confined process silently opens a second empty graph.
 
 `concept.md` is an untracked personal draft.

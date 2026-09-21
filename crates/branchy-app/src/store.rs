@@ -241,6 +241,7 @@ pub fn load(path: &Path) -> Result<Graph, StoreError> {
 ///
 /// [`StoreError::Io`] or [`StoreError::Json`].
 pub fn save(path: &Path, graph: &Graph) -> Result<(), StoreError> {
+    let path = &real_path(path);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -262,6 +263,7 @@ pub fn save(path: &Path, graph: &Graph) -> Result<(), StoreError> {
 /// [`StoreError::NothingToUndo`] when the stack is empty, otherwise
 /// [`StoreError::Io`].
 pub fn undo(path: &Path) -> Result<(), StoreError> {
+    let path = &real_path(path);
     let newest = undo_path(path, 1);
     if !newest.exists() {
         return Err(StoreError::NothingToUndo);
@@ -282,9 +284,35 @@ pub fn undo(path: &Path) -> Result<(), StoreError> {
 /// How many changes could still be taken back.
 #[must_use]
 pub fn undo_depth(path: &Path) -> usize {
+    let path = &real_path(path);
     (1..=UNDO_DEPTH)
         .take_while(|slot| undo_path(path, *slot).exists())
         .count()
+}
+
+/// Where writes to `path` really have to go.
+///
+/// Saving writes a temporary file and renames it over the target. If the
+/// target is a symlink, that rename replaces the link itself with a regular
+/// file, and from then on the link and the file it pointed at are two
+/// documents that silently drift apart. Resolving first makes the rename land
+/// on the real file and leaves the link alone — which matters, because
+/// linking the document into a synced or version-controlled folder is exactly
+/// what people do with it.
+fn real_path(path: &Path) -> PathBuf {
+    if let Ok(resolved) = fs::canonicalize(path) {
+        return resolved;
+    }
+    // a link whose target does not exist yet: create the target, keep the link
+    if let Ok(target) = fs::read_link(path) {
+        if target.is_absolute() {
+            return target;
+        }
+        if let Some(parent) = path.parent() {
+            return parent.join(target);
+        }
+    }
+    path.to_path_buf()
 }
 
 /// Moves the current document into slot 1, shifting the rest down and dropping
