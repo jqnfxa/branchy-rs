@@ -9,6 +9,7 @@ What lives here is the part `branchy-core` deliberately refuses to hold:
 - **`store`** — reading and writing the document, atomically, with an undo stack. A save is written beside the target and renamed over it, because a half-written document is exactly what a sync tool would propagate everywhere.
 - **`snapshot`** — the whole derived picture in one value, so a user interface never recomputes status, tier or the queue for itself.
 - **`today`** — the clock, which a graph engine must not read if its tests are to mean anything.
+- **`vault`** — which folder holds the graph. A vault is a folder with the document and a private `.branchy` folder for the undo stack. The short list of recent vaults is per device and shared by the terminal and the window, so both always work in the same one.
 
 The API is not stable and follows whatever the Branchy front ends need.
 

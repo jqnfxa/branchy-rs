@@ -13,15 +13,21 @@ use std::path::{Path, PathBuf};
 use branchy_core::{Area, AreaId, Command, Date, Graph, Node, NodeId};
 use serde::{Deserialize, Serialize};
 
+use crate::vault::{DOCUMENT, Vaults};
+
 /// Bumped when the shape changes in a way an older reader could not cope with.
 const FORMAT_VERSION: u32 = 1;
 
 /// How many changes can be taken back.
 ///
-/// Kept as whole documents beside the real one rather than as a command log,
-/// because a document that will not parse can still be recovered by hand, and
-/// twenty copies of a planning graph cost nothing.
+/// Kept as whole documents rather than as a command log, because a document
+/// that will not parse can still be recovered by hand, and twenty copies of a
+/// planning graph cost nothing.
 const UNDO_DEPTH: usize = 20;
+
+/// State beside the document that belongs to this device alone, and that sync
+/// will leave out: the undo stack, for now.
+const LOCAL_DIR: &str = ".branchy";
 
 /// One stored graph.
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,8 +60,10 @@ struct NodeRecord {
     prereqs: Vec<u64>,
 }
 
-/// Anything that can go wrong reading or writing the document.
+/// Anything that can go wrong reading or writing the document or the list of
+/// vaults.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum StoreError {
     /// The file could not be read or written.
     Io(std::io::Error),
@@ -69,6 +77,21 @@ pub enum StoreError {
     NothingToUndo,
     /// No sensible place to keep the document could be worked out.
     NoHome,
+    /// No vault is open, and none was named.
+    NoVault,
+    /// The vault's folder is gone: moved, renamed or deleted since it was
+    /// opened.
+    VaultMissing(PathBuf),
+    /// A new vault would land in a folder that already has things in it.
+    VaultExists(PathBuf),
+    /// The name would not work as a folder name everywhere Branchy runs.
+    BadVaultName(String),
+    /// A vault has to be a folder, and this is not one.
+    NotAFolder(PathBuf),
+    /// No recent vault goes by that name, and it is not a folder either.
+    UnknownVault(String),
+    /// More than one recent vault goes by that name.
+    AmbiguousVault(String),
 }
 
 impl std::fmt::Display for StoreError {
@@ -85,6 +108,35 @@ impl std::fmt::Display for StoreError {
             Self::NoHome => write!(
                 f,
                 "could not work out where to keep the document; pass --file"
+            ),
+            Self::NoVault => write!(
+                f,
+                "no vault is open. Create one with `branchy vault new <name>`, \
+                 or open a folder with `branchy vault open <folder>`"
+            ),
+            Self::VaultMissing(dir) => write!(
+                f,
+                "the vault folder {} is gone. `branchy vault forget` takes it off the list",
+                dir.display()
+            ),
+            Self::VaultExists(dir) => write!(
+                f,
+                "{} already exists and is not empty. Pick another name, or open it as a vault",
+                dir.display()
+            ),
+            Self::BadVaultName(name) => write!(
+                f,
+                "\"{name}\" cannot be a vault name: it has to work as a folder name, \
+                 so it cannot be empty or hold any of / \\ : * ? \" < > |"
+            ),
+            Self::NotAFolder(path) => write!(f, "{} is not a folder", path.display()),
+            Self::UnknownVault(name) => write!(
+                f,
+                "no recent vault is called {name}, and there is no folder by that name either"
+            ),
+            Self::AmbiguousVault(name) => write!(
+                f,
+                "more than one recent vault is called {name}; give its folder instead"
             ),
         }
     }
@@ -199,22 +251,31 @@ impl Document {
 
 /// Where the document lives when none was named.
 ///
-/// `BRANCHY_FILE` wins, because the per-user data directory is derived from
-/// `HOME` and sandboxes rewrite it: run from inside a snap and you would
-/// silently get a second, empty graph. Every front end resolves the path this
-/// way so they always agree.
+/// `BRANCHY_FILE` wins over everything, which is what scripts, tests and
+/// sandboxes use to pin a front end to one file. Otherwise it is the document
+/// in the vault opened last, so the terminal works wherever the window does.
 ///
 /// # Errors
 ///
-/// [`StoreError::NoHome`] when the platform offers no data directory and the
-/// environment variable is not set either.
+/// [`StoreError::NoVault`] when no vault has been opened yet,
+/// [`StoreError::VaultMissing`] when the last one's folder is gone, or an
+/// error reading the list of vaults.
 pub fn default_path() -> Result<PathBuf, StoreError> {
     if let Some(given) = std::env::var_os("BRANCHY_FILE") {
         return Ok(PathBuf::from(given));
     }
-    directories::ProjectDirs::from("dev", "jqnfxa", "branchy")
-        .map(|dirs| dirs.data_dir().join("graph.json"))
-        .ok_or(StoreError::NoHome)
+    let vaults = Vaults::user()?;
+    let dir = vaults.current().ok_or(StoreError::NoVault)?;
+    // checked here, because a save would quietly recreate a deleted folder
+    if !dir.is_dir() {
+        return Err(StoreError::VaultMissing(dir.to_path_buf()));
+    }
+    Ok(dir.join(DOCUMENT))
+}
+
+/// The per-user directories, named once so every caller agrees.
+pub(crate) fn project_dirs() -> Result<directories::ProjectDirs, StoreError> {
+    directories::ProjectDirs::from("dev", "jqnfxa", "branchy").ok_or(StoreError::NoHome)
 }
 
 /// Reads the graph, or returns an empty one if the file is not there yet.
@@ -242,13 +303,13 @@ pub fn load(path: &Path) -> Result<Graph, StoreError> {
 /// [`StoreError::Io`] or [`StoreError::Json`].
 pub fn save(path: &Path, graph: &Graph) -> Result<(), StoreError> {
     let path = &real_path(path);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
+    tidy_loose_undo(path)?;
     if path.exists() {
         push_undo(path)?;
     }
-    write_atomically(path, graph)
+    let text = serde_json::to_string_pretty(&Document::from_graph(graph))?;
+    write_atomically(path, &text)?;
+    Ok(())
 }
 
 /// Takes back the last change.
@@ -264,6 +325,7 @@ pub fn save(path: &Path, graph: &Graph) -> Result<(), StoreError> {
 /// [`StoreError::Io`].
 pub fn undo(path: &Path) -> Result<(), StoreError> {
     let path = &real_path(path);
+    tidy_loose_undo(path)?;
     let newest = undo_path(path, 1);
     if !newest.exists() {
         return Err(StoreError::NothingToUndo);
@@ -285,6 +347,8 @@ pub fn undo(path: &Path) -> Result<(), StoreError> {
 #[must_use]
 pub fn undo_depth(path: &Path) -> usize {
     let path = &real_path(path);
+    // best effort: failing to tidy only means counting the new place as empty
+    let _ = tidy_loose_undo(path);
     (1..=UNDO_DEPTH)
         .take_while(|slot| undo_path(path, *slot).exists())
         .count()
@@ -328,20 +392,63 @@ fn push_undo(path: &Path) -> Result<(), StoreError> {
             fs::rename(&from, undo_path(path, slot + 1))?;
         }
     }
-    fs::copy(path, undo_path(path, 1))?;
+    let copy = undo_path(path, 1);
+    if let Some(dir) = copy.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::copy(path, copy)?;
     Ok(())
 }
 
+/// `.branchy/undo/graph.json.1` for `graph.json`: out of sight, and named after
+/// the document so two documents in one folder keep separate stacks.
 fn undo_path(path: &Path, slot: usize) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".{slot}"));
+    path.with_file_name(LOCAL_DIR).join("undo").join(name)
+}
+
+/// Where versions before vaults kept the stack: right beside the document.
+fn loose_undo_path(path: &Path, slot: usize) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(format!(".undo{slot}"));
     path.with_file_name(name)
 }
 
-fn write_atomically(path: &Path, graph: &Graph) -> Result<(), StoreError> {
-    let text = serde_json::to_string_pretty(&Document::from_graph(graph))?;
-    let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, text)?;
-    fs::rename(&temporary, path)?;
+/// Moves an undo stack left by an older version into `.branchy/undo/`.
+///
+/// It used to be twenty loose files beside the document, in what is now a
+/// folder people open and browse as a vault. Moving them rather than leaving
+/// them keeps the history, so the first undo after upgrading still works.
+fn tidy_loose_undo(path: &Path) -> std::io::Result<()> {
+    if !loose_undo_path(path, 1).exists() || undo_path(path, 1).exists() {
+        return Ok(());
+    }
+    if let Some(dir) = undo_path(path, 1).parent() {
+        fs::create_dir_all(dir)?;
+    }
+    for slot in 1..=UNDO_DEPTH {
+        let from = loose_undo_path(path, slot);
+        if !from.exists() {
+            break;
+        }
+        fs::rename(&from, undo_path(path, slot))?;
+    }
     Ok(())
+}
+
+/// Replaces a file's contents in one step, following a symlink to its target.
+pub(crate) fn replace_file(path: &Path, text: &str) -> std::io::Result<()> {
+    write_atomically(&real_path(path), text)
+}
+
+fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut temporary = path.as_os_str().to_os_string();
+    temporary.push(".tmp");
+    let temporary = PathBuf::from(temporary);
+    fs::write(&temporary, text)?;
+    fs::rename(&temporary, path)
 }
