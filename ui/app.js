@@ -631,13 +631,18 @@
       if (animation) cancelAnimationFrame(animation);
       drag = { x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y, moved: false };
       stage.classList.add("grabbing");
-      stage.setPointerCapture(ev.pointerId);
     });
     stage.addEventListener("pointermove", function (ev) {
       if (!drag) return;
       var dx = ev.clientX - drag.x;
       var dy = ev.clientY - drag.y;
-      if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+      // Capture only once this is really a drag. Captured from the press, the
+      // release goes to the stage, and WebKit sends the click there too, so
+      // clicking a node never reached it.
+      if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+        drag.moved = true;
+        stage.setPointerCapture(ev.pointerId);
+      }
       state.view.x = drag.vx + dx;
       state.view.y = drag.vy + dy;
       applyTransform();
