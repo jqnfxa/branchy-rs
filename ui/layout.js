@@ -15,6 +15,15 @@
   var COL = 210;
   var ROW = 92;
 
+  // A real project backlog is mostly flat: a hundred items with no
+  // prerequisites between them all land in tier 0. Put on one ring, or in one
+  // column, they smear into a solid band. So a ring holds only as many nodes
+  // as fit MIN_ARC apart, and the rest wrap onto further rings WRAP apart,
+  // closer than tiers are, so a wrapped tier still reads as one tier. A graph
+  // where nothing wraps is laid out exactly as it was before.
+  var MIN_ARC = 46;
+  var WRAP = 64;
+
   // Rows of nodes, ordered by tier, with cycle-tangled nodes last.
   function byTier(nodes) {
     var tiers = {};
@@ -58,10 +67,32 @@
   // A direction gets only the rings it actually occupies, not one per absolute
   // tier: a direction whose lowest task is at tier 3 would otherwise sit alone
   // far out and force the whole disc to zoom out to fit it.
+  // How many nodes each ring of a wrapped tier takes, starting at `radius`.
+  // Shares follow each ring's capacity, so the outer rings, which are
+  // longer, take more and the spacing stays even.
+  function wrapRings(count, span, radius) {
+    var caps = [];
+    var room = 0;
+    while (room < count) {
+      var cap = Math.max(1, Math.floor((span * (radius + caps.length * WRAP)) / MIN_ARC));
+      caps.push(cap);
+      room += cap;
+    }
+    var shares = [];
+    var given = 0;
+    caps.forEach(function (cap, i) {
+      var share = i === caps.length - 1 ? count - given : Math.round((count * cap) / room);
+      shares.push(share);
+      given += share;
+    });
+    return shares;
+  }
+
   function radial(areas, nodesByArea, jitter) {
     var positions = {};
     var sectors = [];
     var rings = 0;
+    var outermost = R0;
     var total = 0;
     areas.forEach(function (area) {
       total += Math.max(1, (nodesByArea[area.id] || []).length);
@@ -76,32 +107,44 @@
       var list = nodesByArea[area.id] || [];
       var span = free * (Math.max(1, list.length) / total);
       var start = angle + gap / 2;
-      var rowIndex = 0;
+      var radius = R0 - RING;
 
       byTier(list).forEach(function (row) {
-        var index = rowIndex++;
-        rings = Math.max(rings, index);
-        var radius = R0 + index * RING;
-        row.forEach(function (node, i) {
-          var theta = start + ((i + 0.5) / row.length) * span;
-          var r = radius;
-          if (jitter) {
-            var rnd = prng(node.id);
-            theta += (rnd() - 0.5) * span * 0.34;
-            r += (rnd() - 0.5) * RING * 0.62;
-          }
-          positions[node.id] = { x: Math.cos(theta) * r, y: Math.sin(theta) * r };
+        radius += RING;
+        var shares = wrapRings(row.length, span, radius);
+        var wrapped = shares.length > 1;
+        var at = 0;
+        shares.forEach(function (share, ringIndex) {
+          if (ringIndex > 0) radius += WRAP;
+          var step = span / share;
+          row.slice(at, at + share).forEach(function (node, i) {
+            var theta = start + (i + 0.5) * step;
+            var r = radius;
+            if (jitter) {
+              var rnd = prng(node.id);
+              // on a wrapped ring, bounded by the spacing, or the crowd
+              // would scatter across itself
+              theta += (rnd() - 0.5) * (wrapped ? Math.min(span * 0.34, step * 1.1) : span * 0.34);
+              r += (rnd() - 0.5) * (wrapped ? WRAP : RING) * 0.62;
+            }
+            positions[node.id] = { x: Math.cos(theta) * r, y: Math.sin(theta) * r };
+          });
+          at += share;
         });
       });
 
+      outermost = Math.max(outermost, radius);
       sectors.push({
         area: area,
         mid: start + span / 2,
-        r: R0 + (rowIndex - 0.35) * RING,
+        r: radius + RING * 0.65,
       });
       angle += span + gap;
     });
 
+    // the decorative rings stay evenly spaced; with nothing wrapped, every
+    // node sits on one of them
+    rings = Math.ceil((outermost - R0) / RING);
     return { positions: positions, sectors: sectors, rings: rings };
   }
 
@@ -114,16 +157,32 @@
     areas.forEach(function (area) {
       var list = nodesByArea[area.id] || [];
       if (!list.length) return;
-      var rows = byTier(list);
-      var tallest = 1;
-      rows.forEach(function (row) {
-        tallest = Math.max(tallest, row.length);
+      // a tier taller than this wraps into several columns: roughly as many
+      // rows as make the band square, given how wide a column is
+      var most = Math.max(14, Math.ceil(Math.sqrt((list.length * COL) / ROW)));
+      var columns = [];
+      byTier(list).forEach(function (row) {
+        for (var at = 0; at < row.length; at += most) {
+          columns.push({ nodes: row.slice(at, at + most), wraps: row.length > most });
+        }
+        // a little air after a wrapped tier, so its columns read as one
+        if (row.length > most) columns.push(null);
       });
-      rows.forEach(function (row, column) {
-        var offset = (tallest - row.length) / 2;
-        row.forEach(function (node, i) {
-          positions[node.id] = { x: column * COL, y: y + (offset + i) * ROW };
+      var tallest = 1;
+      columns.forEach(function (column) {
+        if (column) tallest = Math.max(tallest, column.nodes.length);
+      });
+      var x = 0;
+      columns.forEach(function (column) {
+        if (!column) {
+          x += COL * 0.3;
+          return;
+        }
+        var offset = column.wraps ? 0 : (tallest - column.nodes.length) / 2;
+        column.nodes.forEach(function (node, i) {
+          positions[node.id] = { x: x, y: y + (offset + i) * ROW };
         });
+        x += COL;
       });
       sectors.push({ area: area, band: { y0: y, y1: y + (tallest - 1) * ROW } });
       y += tallest * ROW + 78;

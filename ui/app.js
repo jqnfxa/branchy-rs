@@ -463,6 +463,9 @@
     );
     document.getElementById("zLvl").textContent = Math.round(view.k * 100) + "%";
     gNodes.classList.toggle("hide-labels", view.k < 0.52);
+    // too far out for any label to be read, and a big graph is a solid
+    // block of text there
+    gNodes.classList.toggle("hide-all-labels", view.k < 0.36);
   }
 
   function tweenTo(target, ms) {
@@ -506,7 +509,9 @@
     }
     x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
     var w = stage.clientWidth, h = stage.clientHeight;
-    var k = Math.max(0.28, Math.min(1.6, Math.min(w / (x1 - x0), h / (y1 - y0))));
+    // the floor is low so that fit can show a graph of several hundred tasks
+    // whole; labels give way long before it, see applyTransform
+    var k = Math.max(0.06, Math.min(1.6, Math.min(w / (x1 - x0), h / (y1 - y0))));
     return { k: k, x: w / 2 - ((x0 + x1) / 2) * k, y: h / 2 - ((y0 + y1) / 2) * k };
   }
 
@@ -593,7 +598,7 @@
     function zoomAt(mx, my, factor) {
       if (animation) cancelAnimationFrame(animation);
       var view = state.view;
-      var k = Math.max(0.22, Math.min(2.6, view.k * factor));
+      var k = Math.max(0.06, Math.min(2.6, view.k * factor));
       view.x = mx - (mx - view.x) * (k / view.k);
       view.y = my - (my - view.y) * (k / view.k);
       view.k = k;

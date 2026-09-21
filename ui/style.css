@@ -285,6 +285,7 @@ kbd{
    matter: the tasks you could actually start now. Done and locked tasks are
    context at that scale, and read from shape and colour alone. */
 .hide-labels .node:not(.available) .label{opacity:0}
+.hide-all-labels .node .label{opacity:0}
 
 .node.just-freed .disc{animation:freed 1.5s ease-out 1}
 @keyframes freed{
