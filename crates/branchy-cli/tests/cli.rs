@@ -503,3 +503,193 @@ fn a_link_to_a_document_that_does_not_exist_yet_creates_the_target() {
             .is_symlink()
     );
 }
+
+// ── vaults ──────────────────────────────────────────────────────────────
+
+/// A scratch folder and a vault list of its own, and nothing else.
+///
+/// Every run sets `BRANCHY_VAULTS` and clears `BRANCHY_FILE`. Without both, a
+/// test would read the real user's list, or follow their environment straight
+/// into their real graph.
+struct Desk(Scratch);
+
+impl Desk {
+    fn new(tag: &str) -> Self {
+        Self(Scratch::new(tag))
+    }
+
+    fn dir(&self) -> &Path {
+        self.0.path().parent().expect("scratch folder")
+    }
+
+    fn command(&self, args: &[&str]) -> Command {
+        let mut command = Command::new(binary());
+        command
+            .env("BRANCHY_VAULTS", self.dir().join("vaults.json"))
+            .env_remove("BRANCHY_FILE")
+            .current_dir(self.dir())
+            .args(args);
+        command
+    }
+
+    fn run(&self, args: &[&str]) -> String {
+        let output = self.command(args).output().expect("binary runs");
+        assert!(
+            output.status.success(),
+            "`branchy {}` failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).expect("utf-8 output")
+    }
+
+    fn fails(&self, args: &[&str]) -> String {
+        let output = self.command(args).output().expect("binary runs");
+        assert!(
+            !output.status.success(),
+            "`branchy {}` unexpectedly succeeded",
+            args.join(" ")
+        );
+        String::from_utf8(output.stderr).expect("utf-8 output")
+    }
+
+    /// Creates a vault under the scratch folder.
+    fn vault(&self, name: &str) -> PathBuf {
+        let parent = self.dir().display().to_string();
+        self.run(&["vault", "new", name, "--in", &parent]);
+        self.where_is()
+            .parent()
+            .expect("vault folder")
+            .to_path_buf()
+    }
+
+    fn where_is(&self) -> PathBuf {
+        PathBuf::from(self.run(&["where"]).trim())
+    }
+}
+
+#[test]
+fn with_no_vault_the_terminal_says_how_to_start() {
+    let desk = Desk::new("vault-none");
+    assert!(desk.fails(&["queue"]).contains("branchy vault new"));
+    assert!(desk.run(&["vault"]).contains("No vaults yet"));
+}
+
+#[test]
+fn a_new_vault_is_where_the_next_commands_go() {
+    let desk = Desk::new("vault-new");
+    let work = desk.vault("Work");
+    desk.run(&["area", "Jobs"]);
+    desk.run(&["add", "First task"]);
+
+    assert_eq!(desk.where_is(), work.join("graph.json"));
+    assert!(desk.run(&["list"]).contains("First task"));
+    assert!(work.join("graph.json").is_file());
+}
+
+#[test]
+fn a_new_vault_goes_in_the_current_directory_unless_told_otherwise() {
+    let desk = Desk::new("vault-here");
+    desk.run(&["vault", "new", "Here"]);
+    assert!(desk.dir().join("Here").join("graph.json").is_file());
+}
+
+#[test]
+fn opening_a_vault_moves_the_terminal_to_it() {
+    let desk = Desk::new("vault-open");
+    let work = desk.vault("Work");
+    let life = desk.vault("Life");
+    assert_eq!(desk.where_is(), life.join("graph.json"));
+
+    desk.run(&["vault", "open", "Work"]);
+    assert_eq!(desk.where_is(), work.join("graph.json"));
+
+    // any folder opens, and joins the list
+    let plans = desk.dir().join("Plans");
+    std::fs::create_dir(&plans).expect("mkdir");
+    desk.run(&["vault", "open", &plans.display().to_string()]);
+    assert!(desk.run(&["vault", "list"]).contains("* Plans"));
+}
+
+#[test]
+fn the_vault_option_reaches_another_vault_for_one_command_only() {
+    let desk = Desk::new("vault-flag");
+    let work = desk.vault("Work");
+    desk.run(&["area", "Jobs"]);
+    desk.vault("Life");
+    desk.run(&["vault", "open", "Work"]);
+
+    desk.run(&["--vault", "Life", "area", "Health"]);
+    desk.run(&["--vault", "Life", "add", "Sleep more"]);
+
+    assert!(
+        desk.run(&["--vault", "Life", "list"])
+            .contains("Sleep more")
+    );
+    assert!(!desk.run(&["list"]).contains("Sleep more"));
+    assert_eq!(desk.where_is(), work.join("graph.json"), "still in Work");
+}
+
+#[test]
+fn the_list_marks_the_current_vault_and_keeps_five() {
+    let desk = Desk::new("vault-list");
+    for name in ["V1", "V2", "V3", "V4", "V5", "V6"] {
+        desk.vault(name);
+    }
+    let listing = desk.run(&["vault", "list"]);
+    assert!(listing.lines().next().expect("a line").starts_with("* V6"));
+    assert_eq!(listing.lines().count(), 5);
+    assert!(!listing.contains("V1"));
+    assert!(
+        desk.dir().join("V1").is_dir(),
+        "dropped off the list, not deleted"
+    );
+}
+
+#[test]
+fn forgetting_a_vault_leaves_its_folder_alone() {
+    let desk = Desk::new("vault-forget");
+    desk.vault("Work");
+    let life = desk.vault("Life");
+
+    desk.run(&["vault", "forget", "Life"]);
+    assert!(!desk.run(&["vault"]).contains("Life"));
+    assert!(life.join("graph.json").is_file());
+}
+
+#[test]
+fn a_deleted_vault_is_reported_rather_than_recreated() {
+    let desk = Desk::new("vault-gone");
+    let work = desk.vault("Work");
+    std::fs::remove_dir_all(&work).expect("delete");
+
+    assert!(desk.fails(&["area", "Jobs"]).contains("is gone"));
+    assert!(!work.exists(), "a save recreated the deleted folder");
+    assert!(desk.run(&["vault"]).contains("folder not found"));
+}
+
+#[test]
+fn branchy_file_still_wins_over_the_current_vault() {
+    let desk = Desk::new("vault-env");
+    desk.vault("Work");
+    let pinned = desk.dir().join("pinned.json");
+    let output = desk
+        .command(&["where"])
+        .env("BRANCHY_FILE", &pinned)
+        .output()
+        .expect("binary runs");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        pinned.display().to_string()
+    );
+}
+
+#[test]
+fn a_file_and_a_vault_cannot_both_be_named() {
+    let desk = Desk::new("vault-conflict");
+    desk.vault("Work");
+    assert!(
+        desk.fails(&["--file", "x.json", "--vault", "Work", "list"])
+            .contains("cannot be used with")
+    );
+}

@@ -5,6 +5,7 @@
 
 use std::fmt::Write as _;
 
+use branchy_app::Vaults;
 use branchy_app::today::{Urgency, today};
 use branchy_core::{Date, Graph, NodeId, Status};
 
@@ -424,4 +425,30 @@ fn truncate(text: &str, width: usize) -> String {
     }
     let kept: String = text.chars().take(width.saturating_sub(1)).collect();
     format!("{kept}\u{2026}")
+}
+
+/// The recent vaults, the current one marked.
+pub fn vaults(vaults: &Vaults) -> String {
+    let entries = vaults.entries();
+    if entries.is_empty() {
+        return "No vaults yet. Create one with `branchy vault new <name>`, \
+                or open a folder with `branchy vault open <folder>`.\n"
+            .to_string();
+    }
+    let width = entries
+        .iter()
+        .map(|entry| entry.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    let mut out = String::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let mark = if index == 0 { '*' } else { ' ' };
+        let gone = if entry.missing {
+            "  (folder not found)"
+        } else {
+            ""
+        };
+        let _ = writeln!(out, "{mark} {:width$}  {}{gone}", entry.name, entry.path);
+    }
+    out
 }

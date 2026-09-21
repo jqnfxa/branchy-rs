@@ -126,8 +126,9 @@ impl std::fmt::Display for StoreError {
             ),
             Self::BadVaultName(name) => write!(
                 f,
-                "\"{name}\" cannot be a vault name: it has to work as a folder name, \
-                 so it cannot be empty or hold any of / \\ : * ? \" < > |"
+                "\"{name}\" cannot be a vault name. It becomes a folder name on every \
+                 system the vault may reach, so it cannot be empty, hold any of \
+                 / \\ : * ? \" < > |, end in a dot, or be a name Windows reserves such as CON"
             ),
             Self::NotAFolder(path) => write!(f, "{} is not a folder", path.display()),
             Self::UnknownVault(name) => write!(

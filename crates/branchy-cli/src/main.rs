@@ -6,10 +6,10 @@
 
 mod render;
 
-use branchy_app::{snapshot, store};
+use branchy_app::{StoreError, Vault, Vaults, snapshot, store};
 
 use std::fmt::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use branchy_core::{Graph, Status};
@@ -19,9 +19,14 @@ use clap::{Parser, Subcommand};
 #[derive(Debug, Parser)]
 #[command(name = "branchy", version, about, long_about = None)]
 struct Cli {
-    /// Document to work on. Defaults to the per-user data directory.
-    #[arg(long, short, global = true)]
+    /// Document to work on, bypassing vaults altogether.
+    #[arg(long, short, global = true, conflicts_with = "vault")]
     file: Option<PathBuf>,
+
+    /// Vault to work in for this one command, by name or folder. Defaults to
+    /// the vault opened last, here or in the window.
+    #[arg(long, global = true, value_name = "NAME|FOLDER")]
+    vault: Option<String>,
 
     #[command(subcommand)]
     command: Cmd,
@@ -98,6 +103,38 @@ enum Cmd {
     Undo,
     /// Print where the document lives
     Where,
+
+    /// List, create, open and forget vaults. On its own, lists them.
+    Vault {
+        #[command(subcommand)]
+        action: Option<VaultCmd>,
+    },
+}
+
+#[derive(Debug, Clone, Subcommand)]
+enum VaultCmd {
+    /// The recent vaults, newest first; the current one is marked
+    List,
+    /// Create a vault and work in it: vault new <name> [--in <folder>]
+    New {
+        /// The vault's name, which is also its folder's name
+        name: String,
+        /// Where to create it. Defaults to the current directory.
+        #[arg(long = "in", value_name = "FOLDER")]
+        parent: Option<PathBuf>,
+    },
+    /// Work in a vault from now on, here and in the window's recent list
+    Open {
+        /// A recent vault's name, or any folder
+        #[arg(value_name = "NAME|FOLDER")]
+        vault: String,
+    },
+    /// Take a vault off the recent list. Its folder is left alone.
+    Forget {
+        /// A recent vault's name or folder
+        #[arg(value_name = "NAME|FOLDER")]
+        vault: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -115,10 +152,10 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: &Cli) -> Result<String, String> {
-    let path = match &cli.file {
-        Some(given) => given.clone(),
-        None => store::default_path().map_err(|e| e.to_string())?,
-    };
+    if let Cmd::Vault { action } = &cli.command {
+        return vault(action.clone().unwrap_or(VaultCmd::List)).map_err(|e| e.to_string());
+    }
+    let path = document(cli).map_err(|e| e.to_string())?;
 
     // read-only views and file-level operations first
     match &cli.command {
@@ -190,7 +227,8 @@ fn run(cli: &Cli) -> Result<String, String> {
         | Cmd::Calendar
         | Cmd::Snapshot
         | Cmd::Undo
-        | Cmd::Where => unreachable!("handled above"),
+        | Cmd::Where
+        | Cmd::Vault { .. } => unreachable!("handled above"),
     };
 
     let command = branchy_core::parse(&graph, &line).map_err(|e| e.to_string())?;
@@ -213,7 +251,72 @@ fn run(cli: &Cli) -> Result<String, String> {
     Ok(out)
 }
 
-fn load(path: &std::path::Path) -> Result<Graph, String> {
+/// Which document a command works on.
+///
+/// An explicit `--file` or `--vault` wins, then `BRANCHY_FILE`, then the vault
+/// opened last.
+fn document(cli: &Cli) -> Result<PathBuf, StoreError> {
+    if let Some(given) = &cli.file {
+        return Ok(given.clone());
+    }
+    if let Some(named) = &cli.vault {
+        return Ok(Vaults::user()?.resolve(named)?.document());
+    }
+    store::default_path()
+}
+
+fn vault(action: VaultCmd) -> Result<String, StoreError> {
+    let mut vaults = Vaults::user()?;
+    let mut out = String::new();
+    match action {
+        VaultCmd::List => return Ok(render::vaults(&vaults)),
+        VaultCmd::New { name, parent } => {
+            let parent = match parent {
+                Some(given) => given,
+                None => std::env::current_dir()?,
+            };
+            let vault = Vault::create(&parent, &name)?;
+            vaults.opened(&vault);
+            vaults.save()?;
+            let _ = writeln!(
+                out,
+                "Created {} at {}. It is the current vault now.",
+                vault.name(),
+                vault.dir().display()
+            );
+        }
+        VaultCmd::Open { vault: given } => {
+            let vault = vaults.resolve(&given)?;
+            vaults.opened(&vault);
+            vaults.save()?;
+            let _ = writeln!(
+                out,
+                "Working in {} ({}).",
+                vault.name(),
+                vault.dir().display()
+            );
+        }
+        VaultCmd::Forget { vault: given } => {
+            let dir = vaults.forget(&given)?;
+            vaults.save()?;
+            let _ = writeln!(
+                out,
+                "Took {} off the list. The folder is still there.",
+                dir.display()
+            );
+        }
+    }
+    if let Some(file) = std::env::var_os("BRANCHY_FILE") {
+        let _ = writeln!(
+            out,
+            "Note: BRANCHY_FILE is set, so every other command still uses {}.",
+            Path::new(&file).display()
+        );
+    }
+    Ok(out)
+}
+
+fn load(path: &Path) -> Result<Graph, String> {
     store::load(path).map_err(|e| format!("{} ({})", e, path.display()))
 }
 
