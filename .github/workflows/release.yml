@@ -74,6 +74,8 @@ jobs:
 
             Installing through `apt` rather than `dpkg -i` pulls in the webview libraries the window needs.
 
+            Installing straight from `~/Downloads` may print `N: Download is performed unsandboxed as root ... couldn't be accessed by user '_apt'`. That is a notice, not an error, and the package installs. Recent Ubuntu keeps home folders private, so apt's unprivileged user cannot read the file and apt reads it as root instead. Installing from `/tmp` avoids the message.
+
             Built on Ubuntu 22.04, so it runs there and on anything newer, including Debian 12.
 
             The command line on its own, without the window, is on crates.io:
