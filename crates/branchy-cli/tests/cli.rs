@@ -94,7 +94,7 @@ fn seeded(tag: &str) -> Scratch {
 fn a_missing_file_reads_as_an_empty_graph() {
     let scratch = Scratch::new("empty");
     assert!(run(&scratch, &["tree"]).contains("The graph is empty"));
-    assert!(run(&scratch, &["queue"]).contains("Nothing is available"));
+    assert!(run(&scratch, &["queue"]).contains("The graph is empty"));
 }
 
 #[test]
@@ -414,4 +414,18 @@ fn a_document_written_before_deadlines_still_loads() {
     .expect("write");
     assert!(run(&scratch, &["queue"]).contains("Old task"));
     assert!(run(&scratch, &["calendar"]).contains("Nothing has a deadline"));
+}
+
+#[test]
+fn a_brand_new_graph_says_how_to_start_not_to_look_for_cycles() {
+    let scratch = Scratch::new("first-run");
+    let first = run(&scratch, &["queue"]);
+    assert!(first.contains("branchy area"), "{first}");
+    assert!(
+        !first.contains("cycles"),
+        "a new user has no cycles: {first}"
+    );
+
+    run(&scratch, &["area", "Work", "#4fd1c5"]);
+    assert!(run(&scratch, &["queue"]).contains("branchy add"));
 }

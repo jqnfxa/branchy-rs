@@ -44,6 +44,16 @@ pub fn queue(graph: &Graph) -> String {
     let deadlines = graph.effective_due();
     let now = today();
     if queue.is_empty() {
+        // An empty graph and a blocked one both have an empty queue, but the
+        // first is a new user and the second is a problem, and they need
+        // opposite advice.
+        if graph.is_empty() {
+            return if graph.area_count() == 0 {
+                "The graph is empty. Start with a direction:\n  branchy area \"Hard skills\" \"#4fd1c5\"\n".into()
+            } else {
+                "No tasks yet. Add one:\n  branchy add \"My first task\"\n".into()
+            };
+        }
         return "Nothing is available. Try `branchy cycles`, or finish something first.\n".into();
     }
     let mut out = format!("{} available:\n", queue.len());
