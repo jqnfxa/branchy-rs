@@ -75,7 +75,7 @@ Verified end to end on 2026-09-20 by driving the real window, and on 2026-09-21 
 
 No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by driving the shell. Bugs found that way and not by any test: a shortcut key leaking into the field its own dialog had just focused, `Enter` saving from only one of the form's inputs, a language `<select>` changed by a scroll wheel passing over it, an empty graph leaving the camera off-centre with the hub behind the empty state's text, and **clicking a node never selecting it in the Tauri window** (the canvas took pointer capture on every press, and WebKit then sends the click to the capturing element). The last one shipped in every release up to 0.2.0.
 
-Scale was tested on 2026-09-21 by importing a real project's planning docs, 817 tasks in 10 directions and mostly flat. Two things broke and were fixed in the layout rather than the data: a tier with more nodes than its ring holds now wraps onto further rings (a tall layered column into several columns), and labels are placed greedily by importance so none overlaps another, in a layer above every node. Drawing 817 nodes in SVG is still fast enough.
+Scale was tested on 2026-09-21 by importing a real project's planning docs, 817 tasks in 10 directions and mostly flat. Two things broke and were fixed in the layout rather than the data: a tier with more nodes than its ring holds now wraps onto further rings (a tall layered column into several columns), and labels are placed greedily by importance so none overlaps another, in a layer above every node. It is legible at that size but not fast: see "Rendering is slow at scale" below.
 
 Invariants worth not breaking:
 
@@ -100,6 +100,18 @@ Invariants worth not breaking:
 - Whether "done" is called "unlocked" in the UI skin.
 - ~~Due dates.~~ Done on 2026-09-20: deadlines that propagate backwards, a calendar view, urgency in the queue.
 - **Still open: partial progress and recurrence.** "150 problems, 40 done" and "gym three times a week" do not fit a done flag. Recurrence in particular does not fit a DAG node at all and may want to be a different kind of thing. Either changes the data model, so decide before phase 3 rather than after.
+- **Still open: rendering is slow at scale.** The window runs at about 5 fps on the 817-task vault above (reported 2026-09-21, 0.2.x on Linux). Not profiled yet, so the causes below are suspects, not findings:
+  - Each node is an SVG group of five elements, a `<title>` among them, plus a label. That's about 5 000 elements before any links, and pan and zoom transform all of them.
+  - Every available task has a halo with an infinite CSS pulse, 488 of them here. That means continuous repaints even when idle, and WebKitGTK often composites in software.
+  - Label placement reruns on every zoom step above 4%.
+
+  Measure first: which interaction is slow (idle, pan, zoom, select), with a frame counter or the WebKit inspector's timeline on that vault. Candidate fixes, cheapest first:
+  - stop the pulse above some number of available tasks, or while zoomed out or panning;
+  - drop the per-node `<title>`;
+  - cull nodes and links outside the viewport;
+  - draw nodes and links on a Canvas and keep SVG only for what is interactive or selected.
+
+  Done means smooth panning and zooming, at least 30 fps, on a graph of this size, with small graphs looking as they do now.
 - **Sync is not built.** Two devices each have their own independent document today. Putting the JSON in Syncthing before phase 3 is unsafe: concurrent edits produce `*.sync-conflict-*` files and nothing merges them.
 
 ## Running the desktop shell

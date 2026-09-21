@@ -184,4 +184,4 @@ Both are styling and rendering references only. Neither is the shape of the real
 - How time enters the model: due dates, recurring items, partial progress. `concept.md` asks for calendar planning, and none of it exists in the model yet.
 - Priority: a numeric field, or drag-to-reorder within the queue.
 - Authoring by pointing: the command line covers creating and wiring, but there is still no click-driven add dialog or prerequisite picker, and no way to create, rename or recolor a direction.
-- Whether the tree stays SVG. It handles 817 nodes (a real project's planning docs, imported on 2026-09-21) with ring wrapping and label placement as the level-of-detail rule. A graph several times larger may still need viewport culling or a Canvas renderer.
+- Whether the tree stays SVG. Ring wrapping and label placement keep 817 nodes (a real project's planning docs, imported on 2026-09-21) legible, but the window renders them at about 5 fps. Viewport culling, fewer animated elements, or a Canvas renderer for the bulk of the graph are the options, and they need profiling first; the open item is in CLAUDE.md.
