@@ -33,6 +33,10 @@ The user picks the default in settings and switches live with `1`, `2` and `3`. 
 
 In Radial, a direction is given only the rings it actually occupies, not one ring per absolute tier. A direction whose lowest node is at tier 3 would otherwise sit alone far out and force the whole disc to zoom out.
 
+A real project backlog is mostly flat: a hundred tasks with nothing between them all land in tier 0. So a ring holds only as many nodes as fit 46 px apart, and the rest of the tier wraps onto further rings, closer together than tiers are, so a wrapped tier still reads as one. Layered does the same with a column that grows taller than the band is wide. A graph where nothing wraps is laid out exactly as before.
+
+**Labels are placed, not just drawn.** At several hundred tasks, labels overlap at any zoom, because a label is wider than the gap between two nodes. They are placed in order of importance: the selected task, then available tasks by priority, then locked ones, then done ones. A label that would overlap one already placed waits until zooming in makes room for it. Labels sit in a layer above every node, so no node covers one.
+
 ## Directions
 
 A direction is a user-defined group with its own accent color (work project, hard skills, social skills, health, anything else). Prerequisites may cross directions, and **cross-direction connectors are drawn**, dashed and colored by their *source* direction. This is the point of the app: a career task visibly pulling from mathematics is what makes it a skill tree rather than four separate lists. The detail panel additionally names the source direction on each cross-direction prerequisite.
@@ -180,4 +184,4 @@ Both are styling and rendering references only. Neither is the shape of the real
 - How time enters the model: due dates, recurring items, partial progress. `concept.md` asks for calendar planning, and none of it exists in the model yet.
 - Priority: a numeric field, or drag-to-reorder within the queue.
 - Authoring by pointing: the command line covers creating and wiring, but there is still no click-driven add dialog or prerequisite picker, and no way to create, rename or recolor a direction.
-- Whether the tree stays SVG. It is comfortable to a few hundred nodes; a graph grown over years may need viewport culling or a Canvas renderer, and a level-of-detail rule for what to draw when zoomed out.
+- Whether the tree stays SVG. It handles 817 nodes (a real project's planning docs, imported on 2026-09-21) with ring wrapping and label placement as the level-of-detail rule. A graph several times larger may still need viewport culling or a Canvas renderer.

@@ -73,7 +73,9 @@ Verified end to end on 2026-09-20 by driving the real window, and on 2026-09-21 
 
 **A change to a published crate reaches nobody until its version is bumped and it is published again.** crates.io refuses a version it already holds, and versions can be yanked but never deleted. Bump deliberately, and publish in dependency order: core, app, cli.
 
-No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by driving the shell. Bugs found that way and not by any test: a shortcut key leaking into the field its own dialog had just focused, `Enter` saving from only one of the form's inputs, a language `<select>` changed by a scroll wheel passing over it, and an empty graph leaving the camera off-centre with the hub behind the empty state's text.
+No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by driving the shell. Bugs found that way and not by any test: a shortcut key leaking into the field its own dialog had just focused, `Enter` saving from only one of the form's inputs, a language `<select>` changed by a scroll wheel passing over it, an empty graph leaving the camera off-centre with the hub behind the empty state's text, and **clicking a node never selecting it in the Tauri window** (the canvas took pointer capture on every press, and WebKit then sends the click to the capturing element). The last one shipped in every release up to 0.2.0.
+
+Scale was tested on 2026-09-21 by importing a real project's planning docs, 817 tasks in 10 directions and mostly flat. Two things broke and were fixed in the layout rather than the data: a tier with more nodes than its ring holds now wraps onto further rings (a tall layered column into several columns), and labels are placed greedily by importance so none overlaps another, in a layer above every node. Drawing 817 nodes in SVG is still fast enough.
 
 Invariants worth not breaking:
 
