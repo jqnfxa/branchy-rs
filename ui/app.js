@@ -123,7 +123,7 @@
   /* ---------- svg plumbing ---------- */
 
   var NS = "http://www.w3.org/2000/svg";
-  var stage, canvas, world, gDecor, gLinks, gFx, gNodes, inspector, dlg;
+  var stage, canvas, world, gDecor, gLinks, gFx, gNodes, gLabels, inspector, dlg;
   var palette, palIn, palOut, palSugg, queueEl, queueBtn, qInput, searchWrap;
   var dockEl, rowEl, toastEl, bannerEl;
 
@@ -328,6 +328,7 @@
     gDecor.textContent = "";
     gLinks.textContent = "";
     gNodes.textContent = "";
+    gLabels.textContent = "";
     gFx.textContent = "";
 
     var positions = LAY.positions;
@@ -403,9 +404,21 @@
       group.appendChild(el("circle", { class: "disc", cx: 0, cy: 0, r: 18 }));
       group.appendChild(glyphFor(node.status));
 
-      var label = el("text", { class: "label", x: 0, y: 34 });
+      // Labels live in a layer of their own above every node: inside the
+      // node's group, a node drawn later would paint over it. So a label
+      // carries its node's state as classes of its own.
+      var label = el("text", {
+        class: "label " + node.status +
+          (node.urgency === "overdue" && !node.done ? " is-overdue" : "") +
+          (state.selected === node.id ? " sel" : ""),
+        x: at.x,
+        y: at.y + 34,
+      });
       label.textContent = node.name;
-      group.appendChild(label);
+      label.dataset.id = node.id;
+      gLabels.appendChild(label);
+      group.addEventListener("mouseenter", function () { label.classList.add("hover"); });
+      group.addEventListener("mouseleave", function () { label.classList.remove("hover"); });
       group.appendChild(el("circle", { class: "hit", cx: 0, cy: 0, r: 26 }));
 
       var title = el("title");
@@ -425,8 +438,88 @@
       gNodes.appendChild(group);
     });
 
+    // every label is a new element now, so none has been placed
+    labelsAt = null;
     updateEmphasis();
     applyTransform();
+  }
+
+  /* ---------- labels: only as many as can be read ---------- */
+
+  // At a few dozen tasks every label fits. At several hundred they overlap at
+  // any zoom, because a label is far wider than the gap between two nodes.
+  // So labels are placed in order of importance, and one that would overlap
+  // a label already placed is left out until zooming in makes room for it.
+  // Everything scales with the zoom and nothing with panning, so this runs
+  // only when the zoom changes, or when what is emphasised does.
+  var labelsAt = null;
+  var labelsQueued = false;
+
+  function labelRank(node) {
+    if (node.id === state.selected) return 0;
+    var status = node.status === "available" ? 1 : node.status === "done" ? 3 : 2;
+    return status * 1000 - node.priority;
+  }
+
+  function placeLabels() {
+    labelsQueued = false;
+    if (!LAY) return;
+    var k = state.view.k;
+    labelsAt = k;
+    var onlyAvailable = k < 0.52; // matches .hide-labels in the stylesheet
+    var entries = [];
+    Array.prototype.forEach.call(gLabels.children, function (label) {
+      var node = byId[label.dataset.id];
+      var at = node && LAY.positions[node.id];
+      if (!at) return;
+      // a faded or zoom-hidden label takes no room
+      var hidden = label.classList.contains("faded") ||
+        (onlyAvailable && node.status !== "available" && node.id !== state.selected);
+      if (hidden) {
+        label.classList.remove("culled");
+        return;
+      }
+      if (label._width === undefined) {
+        label._width = label.getComputedTextLength() || node.name.length * 6.6;
+      }
+      entries.push({ label: label, x: at.x, y: at.y + 30, w: label._width, rank: labelRank(node) });
+    });
+    entries.sort(function (a, b) { return a.rank - b.rank; });
+
+    // a coarse grid over screen space, so each test looks at a few boxes
+    var CELL = 96;
+    var grid = {};
+    entries.forEach(function (entry) {
+      var box = {
+        x0: (entry.x - entry.w / 2) * k - 3, x1: (entry.x + entry.w / 2) * k + 3,
+        y0: (entry.y - 11) * k - 1, y1: (entry.y + 4) * k + 1,
+      };
+      var cx0 = Math.floor(box.x0 / CELL), cx1 = Math.floor(box.x1 / CELL);
+      var cy0 = Math.floor(box.y0 / CELL), cy1 = Math.floor(box.y1 / CELL);
+      var clear = true;
+      for (var cx = cx0; cx <= cx1 && clear; cx++) {
+        for (var cy = cy0; cy <= cy1 && clear; cy++) {
+          (grid[cx + "," + cy] || []).forEach(function (other) {
+            if (box.x0 < other.x1 && other.x0 < box.x1 && box.y0 < other.y1 && other.y0 < box.y1) {
+              clear = false;
+            }
+          });
+        }
+      }
+      entry.label.classList.toggle("culled", !clear);
+      if (!clear) return;
+      for (cx = cx0; cx <= cx1; cx++) {
+        for (cy = cy0; cy <= cy1; cy++) {
+          (grid[cx + "," + cy] = grid[cx + "," + cy] || []).push(box);
+        }
+      }
+    });
+  }
+
+  function queueLabels() {
+    if (labelsQueued) return;
+    labelsQueued = true;
+    requestAnimationFrame(placeLabels);
   }
 
   function nodeEl(id) {
@@ -462,10 +555,11 @@
       "translate(" + view.x + "," + view.y + ") scale(" + view.k + ")"
     );
     document.getElementById("zLvl").textContent = Math.round(view.k * 100) + "%";
-    gNodes.classList.toggle("hide-labels", view.k < 0.52);
+    gLabels.classList.toggle("hide-labels", view.k < 0.52);
     // too far out for any label to be read, and a big graph is a solid
     // block of text there
-    gNodes.classList.toggle("hide-all-labels", view.k < 0.36);
+    gLabels.classList.toggle("hide-all-labels", view.k < 0.36);
+    if (labelsAt === null || Math.abs(view.k - labelsAt) > view.k * 0.04) queueLabels();
   }
 
   function tweenTo(target, ms) {
@@ -674,11 +768,16 @@
     Array.prototype.forEach.call(gNodes.children, function (group) {
       group.classList.toggle("faded", !!set && !set[group.dataset.id]);
     });
+    Array.prototype.forEach.call(gLabels.children, function (label) {
+      label.classList.toggle("faded", !!set && !set[label.dataset.id]);
+    });
     Array.prototype.forEach.call(gLinks.children, function (link) {
       var on = !set || (set[link.dataset.from] && set[link.dataset.to]);
       link.classList.toggle("faded", !on);
       link.classList.toggle("on-path", !!path && on);
     });
+    // a faded label gives its room to the ones still in play
+    queueLabels();
   }
 
   /* ---------- selection and inspector ---------- */
@@ -688,6 +787,9 @@
     state.trace = trace !== false;
     Array.prototype.forEach.call(gNodes.children, function (group) {
       group.classList.toggle("sel", group.dataset.id === id);
+    });
+    Array.prototype.forEach.call(gLabels.children, function (label) {
+      label.classList.toggle("sel", label.dataset.id === id);
     });
     updateEmphasis();
     if (!id) {
@@ -1966,7 +2068,8 @@
     gLinks = el("g");
     gFx = el("g");
     gNodes = el("g");
-    [gDecor, gLinks, gFx, gNodes].forEach(function (g) { world.appendChild(g); });
+    gLabels = el("g", { class: "labels" });
+    [gDecor, gLinks, gFx, gNodes, gLabels].forEach(function (g) { world.appendChild(g); });
     canvas.appendChild(world);
 
     wirePanZoom();
