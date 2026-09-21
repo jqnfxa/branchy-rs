@@ -88,4 +88,8 @@ jobs:
 
             There is no sync between devices yet. Each machine keeps its own document, and putting that file in Syncthing or Dropbox is not safe until sync lands: two devices editing it concurrently produce conflict copies that nothing merges.
 
-            The document is plain JSON at `~/.local/share/branchy/graph.json`. `branchy where` prints it, and `BRANCHY_FILE` points the app at another one.
+            ## Where your graph lives
+
+            In a **vault**: a folder you choose, holding `graph.json`, as in Obsidian. The window opens on your recent vaults, and `branchy vault` lists the same ones in a terminal, which always works in the vault the window opened last. A graph left by 0.1 in `~/.local/share/branchy/` shows up as the first vault.
+
+            The document is plain JSON. `branchy where` prints its path, and `BRANCHY_FILE` pins the app to one file instead.

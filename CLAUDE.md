@@ -31,7 +31,8 @@ Differentiator versus existing apps: cross-cutting dependency gating plus one gr
 ## Architecture (decided)
 
 - Cargo workspace. `crates/branchy-core` is a pure Rust library with no UI or platform dependencies. The Tauri 2 shell goes in `src-tauri/` in phase 2.
-- `branchy-core` holds the graph in ordinary Rust collections and has no persistence of its own. Automerge is a layer behind that boundary, added in phase 3, not the in-memory model. Persisted data lives in an Automerge (CRDT) document. Sync is file based: the document is a binary file in a folder that Syncthing keeps in sync between devices, and the `notify` crate reloads and merges external changes. No server. Syncthing was preferred over Dropbox or iCloud because it is open source and works on Linux and Android. A self-hosted axum server is the fallback if this proves weak.
+- **Vaults**, as in Obsidian: a vault is a folder holding one `graph.json`, named by the folder itself, plus a `.branchy/` folder of device-local state (the undo stack). Separate jobs get separate vaults. The list of recent vaults (at most 5) is per device, in `vaults.json` in the configuration directory, never inside a vault, and it lives in `branchy-app::vault` rather than the frontend so the terminal reads the same list: `branchy` works in the vault the window opened last. Removing a vault only takes it off the list; nothing in the app deletes a folder, because the undo stack lives inside it.
+- `branchy-core` holds the graph in ordinary Rust collections and has no persistence of its own. Automerge is a layer behind that boundary, added in phase 3, not the in-memory model. Persisted data lives in an Automerge (CRDT) document. Sync is file based: the document is a binary file in a vault folder that Syncthing keeps in sync between devices, leaving `.branchy/` out, and the `notify` crate reloads and merges external changes. No server. Syncthing was preferred over Dropbox or iCloud because it is open source and works on Linux and Android. A self-hosted axum server is the fallback if this proves weak.
 - Frontend is a web frontend inside Tauri, living in `ui/`. It is plain HTML, CSS and JavaScript with no build step.
 - The interface never recomputes anything about the graph. `branchy-app`'s `snapshot` module produces one value carrying nodes, areas, statuses, tiers, deadlines, the queue and any cycles; the Tauri shell returns it from its `snapshot` command and `branchy snapshot` prints it. That is what makes the frontend developable and the app scriptable without a window.
 - The clock lives in `branchy-app::today`, never in `branchy-core`. A graph engine that reads the clock stops being a pure function of its input.
@@ -58,21 +59,21 @@ Consequences that bind every phase:
 
 ## Status
 
-**Phases 1 and 2 are done.** First published on crates.io as v0.1.0 on 2026-09-21; 0.1.1 and 0.1.2 followed the same day with fixes. Each `v*` tag also publishes the desktop shell as a `.deb` on GitHub Releases (`.github/workflows/release.yml`).
+**Phases 1 and 2 are done, and vaults (0.2.0) on top of them.** First published on crates.io as v0.1.0 on 2026-09-21; 0.1.1 and 0.1.2 followed the same day with fixes, and 0.2.0 added vaults. Each `v*` tag also publishes the desktop shell as a `.deb` on GitHub Releases (`.github/workflows/release.yml`).
 
 | Crate | Where | What |
 | --- | --- | --- |
 | `branchy-core` | crates.io | The graph. Zero dependencies. |
-| `branchy-app` | crates.io | Persistence, the snapshot view model, the clock. Internal glue; published only so `branchy-cli` could be. |
+| `branchy-app` | crates.io | Persistence, vaults and their recent list, the snapshot view model, the clock. Internal glue; published only so `branchy-cli` could be. |
 | `branchy-cli` | crates.io | The `branchy` binary. `cargo install branchy-cli`. |
 | `branchy-desktop` | `src-tauri/`, not published | The window. Its own workspace and CI job. |
 | — | `ui/` | The frontend. Plain HTML, CSS and JavaScript, no build step. |
 
-Verified end to end on 2026-09-20 by driving the real window, and on 2026-09-21 by installing `branchy-cli` from crates.io into a clean location and running it.
+Verified end to end on 2026-09-20 by driving the real window, and on 2026-09-21 by installing `branchy-cli` from crates.io into a clean location and running it. Vaults were driven in the window on 2026-09-21 on a nested X server: the vault screen, opening, creating through the folder picker, opening a folder, closing, forgetting, reopening the last vault on start, and switching language.
 
 **A change to a published crate reaches nobody until its version is bumped and it is published again.** crates.io refuses a version it already holds, and versions can be yanked but never deleted. Bump deliberately, and publish in dependency order: core, app, cli.
 
-No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by driving the shell. Two bugs found that way and not by any test: a shortcut key leaking into the field its own dialog had just focused, and `Enter` saving from only one of the form's inputs.
+No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by driving the shell. Bugs found that way and not by any test: a shortcut key leaking into the field its own dialog had just focused, `Enter` saving from only one of the form's inputs, a language `<select>` changed by a scroll wheel passing over it, and an empty graph leaving the camera off-centre with the hub behind the empty state's text.
 
 Invariants worth not breaking:
 
@@ -81,7 +82,10 @@ Invariants worth not breaking:
 - The on-disk format lives in `branchy-app/src/store.rs`, written by hand and versioned, never derived from the core's internal layout. New fields are optional with a default, so older documents keep loading. Phase 3 swaps its body for Automerge behind `load` and `save`.
 - Saves are written to a sibling file and renamed over the target. A half-written document is exactly what a sync tool would propagate everywhere. The target is resolved through symlinks first: renaming over a link replaces the link, and the link and its file then silently fork.
 - The window keeps no copy of the graph. Every command reads the file, applies, and saves, exactly as the terminal does, so neither front end can save over a change the other made. A copy held since startup did exactly that. The window also rereads the file when it regains focus, so a change typed in the terminal shows up on switching back.
-- `BRANCHY_FILE` wins over the per-user data directory in every front end. That directory comes from `XDG_DATA_HOME` or `HOME`, which sandboxes rewrite, so without the override a snap-confined process silently opens a second empty graph.
+- Which document a command works on, in every front end: `--file`, then `--vault`, then `BRANCHY_FILE`, then the vault opened last. `BRANCHY_FILE` pins a front end to one file and leaves the vault list alone; the window opens that file directly instead of the vault screen.
+- Anything that holds the vault list for longer than one command (the window) rereads it before changing it, for the same reason the window rereads the graph.
+- A vault whose folder has gone is reported, never recreated: a save would otherwise make the folder again, silently.
+- `BRANCHY_VAULTS` names the list file and turns off adopting a pre-vault graph from the old data directory. **Every test that reaches the vault list sets it and clears `BRANCHY_FILE`**, or it reads the developer's real list or follows their environment into their real graph.
 
 `concept.md` is an untracked personal draft.
 
@@ -103,12 +107,13 @@ cd src-tauri && cargo build
 BRANCHY_FILE=/path/to/graph.json ./target/debug/branchy-desktop
 ```
 
-`BRANCHY_FILE` overrides the per-user document, which is what makes the shell drivable against a fixture. `branchy snapshot > ui/dev-fixture.js` (wrapped in the assignment that file already has) refreshes the sample data the frontend falls back to when opened as a plain file.
+`BRANCHY_FILE` opens one document directly, which is what makes the shell drivable against a fixture. Without it the window starts on the vault screen; set `BRANCHY_VAULTS` to a scratch file so that trying vaults out never touches the real list. `branchy snapshot > ui/dev-fixture.js` (wrapped in the assignment that file already has) refreshes the sample data the frontend falls back to when opened as a plain file.
 
 Two things that will waste an hour if rediscovered:
 
 - **Inside a snap-confined terminal** (the VS Code snap, for instance), the loader picks up `/snap/core20/.../libpthread.so.0` and the binary dies with `undefined symbol: __libc_pthread_init`. Launch it with a clean environment: `env -i HOME=$HOME DISPLAY=$DISPLAY XAUTHORITY=$HOME/.Xauthority PATH=/usr/bin:/bin LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu ./target/debug/branchy-desktop`. From an ordinary terminal none of this is needed.
 - **A blank window** on some Linux setups is WebKitGTK's renderer. `WEBKIT_DISABLE_DMABUF_RENDERER=1` and `WEBKIT_DISABLE_COMPOSITING_MODE=1` fix it.
+- **Driving the window from a script** (xdotool plus screenshots): do it on a nested X server, `Xephyr :5 -screen 1280x800 -ac` and `DISPLAY=:5`, not on the display someone is working at. There, the scripted clicks move their real pointer and their scroll wheel reaches the window, and screenshots capture their notifications. Also run the app with a scratch `HOME`: the webview keeps its storage (the interface preferences) under `HOME`, shared with any installed copy of the app, and the folder picker opens on the real Documents folder otherwise. Xephyr with no window manager delivers clicks but no keystrokes, so typed input has to be checked another way.
 
 ## Tooling
 

@@ -99,7 +99,25 @@ Motion is a setting (Full or Reduced) and also yields to the OS `prefers-reduced
 
 ## Settings
 
-Language, default layout, theme, dock side and motion. Settings are per-device preferences stored locally; they are not part of the graph and must never enter the synced document.
+The open vault first, with "Close vault" and "Open the last vault on start". Then language, default layout, theme, dock side and motion. Settings are per-device preferences stored locally; they are not part of the graph and must never enter the synced document.
+
+## Vaults
+
+A vault is a folder holding one graph, the way an Obsidian vault holds notes, so separate jobs get separate graphs. Its name is the folder's name and nothing else.
+
+With no vault open, the window shows the vault screen instead of the tree:
+
+- **Recent vaults**, at most five, newest first. Each has a button that takes it off the list and never touches the folder. A vault whose folder has moved or gone stays listed, greyed and marked, until it is removed.
+- **Open the last vault on start**, off by default, so the app offers the list unless told otherwise.
+- **Create a new vault**: a name and a location picked with the system's folder dialog. The folder it will become is spelled out before anything is created.
+- **Open a folder as a vault**: any folder, and one without a graph starts empty.
+- The language, as a row of buttons, since nothing else on the screen reaches settings.
+
+Inside a vault, its name sits in the top bar next to the brand and switches vaults when clicked.
+
+The list is per device and shared with the terminal: `branchy` works in the vault the window opened last. Nothing in the interface deletes a vault. The undo stack lives inside the folder, so deleting it is the one action that could never be taken back, and it stays the file manager's job.
+
+On Android, picking arbitrary folders is restricted, so creating a vault has to work with a default location and no dialog.
 
 ## Command layer
 
