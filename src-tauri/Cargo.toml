@@ -21,8 +21,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 branchy-app = { path = "../crates/branchy-app" }
 branchy-core = { path = "../crates/branchy-core" }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 
 # Mirrors the root workspace's lints, which cannot be inherited from here.
 [lints.rust]
