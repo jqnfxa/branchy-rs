@@ -106,11 +106,15 @@ Language, default layout, theme, dock side and motion. Settings are per-device p
 Every mutation is a command, and text is one of the ways to produce one. The grammar is shared:
 
 ```
-add <name> [in <direction>] [after a, b] [before c] [pri n]
-done <task>          undone <task>
+add <name> [in <direction>] [after a, b] [before c] [pri n] [note "..."] [due YYYY-MM-DD]
+done <task>          undone <task>         due <task> <YYYY-MM-DD | none>
 link <a> after <b>   link <a> before <b>   unlink <a> after <b>
-rm <task>            pri <task> <n>        go <task>
+rm <task>            pri <task> <n>        rename <task> <name>
+note <task> <text>   move <task> in <direction>
+area <name> [colour] rename-area <d> <name> recolor-area <d> <colour>   rmarea <d>
 ```
+
+A backslash escapes the next character, so a name may hold a quotation mark. Front ends build lines with `branchy_core::quote` rather than inventing their own quoting.
 
 `after` and `needs` are the same word for "blocked by"; `before` and `blocks` express the same edge from the other end. Tasks are referred to by id or by any unambiguous part of their name, and an ambiguous reference is an error that lists the candidates rather than guessing.
 

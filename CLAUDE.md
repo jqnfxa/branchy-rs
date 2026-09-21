@@ -16,7 +16,8 @@ One dependency graph for everything (work features that block each other, hard s
 - A node has prerequisites, possibly in other areas, so it is a DAG and not a parent/child outline.
 - Status is derived, never stored: `Locked` (a prerequisite is not done), `Available` (all prerequisites done), `Done`, and `Cyclic` (on or downstream of a dependency cycle, so it can never become available).
 - Tier is `1 + max(prerequisite tiers)`, `0` when there are none. Computed by peeling settled nodes (Kahn), never by recursion, so it terminates on a cyclic graph too.
-- Tree view shows the graph. Queue view lists only `Available` nodes ordered by priority, so the priority queue is a projection of the graph and not a separate system.
+- Tree view shows the graph. Queue view lists only `Available` nodes, deadline first and then priority, so the queue is a projection of the graph and not a separate system.
+- A deadline on one node is inherited by everything it depends on, earliest wins (`effective_due`). A date never changes a status, only urgency. With no dates anywhere the queue is pure priority order.
 - Adding a prerequisite must reject cycles, and the refusal carries the loop it found. Deleting a node must strip it from dependents' prerequisite lists.
 - Acyclicity is repairable, not guaranteed. Two devices offline can each add an edge that is legal alone and cyclic together, and a CRDT merges both without complaint. So every derived computation must terminate on a cyclic graph, and `find_cycles` reports what has to be broken.
 - Every mutation is a `Command`. One grammar serves the in-app command line, the `branchy` binary and Tauri's IPC — including the editing forms, which build command lines rather than calling a second API. Commands are also the unit of undo (each has an inverse) and the unit that maps onto Automerge operations.
@@ -32,7 +33,8 @@ Differentiator versus existing apps: cross-cutting dependency gating plus one gr
 - Cargo workspace. `crates/branchy-core` is a pure Rust library with no UI or platform dependencies. The Tauri 2 shell goes in `src-tauri/` in phase 2.
 - `branchy-core` holds the graph in ordinary Rust collections and has no persistence of its own. Automerge is a layer behind that boundary, added in phase 3, not the in-memory model. Persisted data lives in an Automerge (CRDT) document. Sync is file based: the document is a binary file in a folder that Syncthing keeps in sync between devices, and the `notify` crate reloads and merges external changes. No server. Syncthing was preferred over Dropbox or iCloud because it is open source and works on Linux and Android. A self-hosted axum server is the fallback if this proves weak.
 - Frontend is a web frontend inside Tauri, living in `ui/`. It is plain HTML, CSS and JavaScript with no build step.
-- The interface never recomputes anything about the graph. `branchy-cli`'s `snapshot` module produces one value carrying nodes, areas, statuses, tiers, the queue and any cycles, and the Tauri shell will return the same value from a `snapshot` command. `branchy snapshot` prints it, which is what makes the frontend developable and the app scriptable without a window.
+- The interface never recomputes anything about the graph. `branchy-app`'s `snapshot` module produces one value carrying nodes, areas, statuses, tiers, deadlines, the queue and any cycles; the Tauri shell returns it from its `snapshot` command and `branchy snapshot` prints it. That is what makes the frontend developable and the app scriptable without a window.
+- The clock lives in `branchy-app::today`, never in `branchy-core`. A graph engine that reads the clock stops being a pure function of its input.
 
 ## Platforms
 
@@ -56,30 +58,29 @@ Consequences that bind every phase:
 
 ## Status
 
-Done and committed locally: workspace skeleton, rustfmt and clippy config, CI, dual license, README, design concept, commit rules, and two UI prototypes (`docs/prototype/skill-tree.html` is the current one).
+**Phases 1 and 2 are done. Published on crates.io as v0.1.0 on 2026-09-21**, and `main` is pushed.
 
-**Phases 1 and 2 are done and committed.** Nothing is pushed yet.
+| Crate | Where | What |
+| --- | --- | --- |
+| `branchy-core` | crates.io | The graph. Zero dependencies. |
+| `branchy-app` | crates.io | Persistence, the snapshot view model, the clock. Internal glue; published only so `branchy-cli` could be. |
+| `branchy-cli` | crates.io | The `branchy` binary. `cargo install branchy-cli`. |
+| `branchy-desktop` | `src-tauri/`, not published | The window. Its own workspace and CI job. |
+| — | `ui/` | The frontend. Plain HTML, CSS and JavaScript, no build step. |
 
-- `crates/branchy-core` — the graph. Zero dependencies.
-- `crates/branchy-app` — persistence and the snapshot view model.
-- `crates/branchy-cli` — the `branchy` binary.
-- `ui/` — the frontend. Plain HTML, CSS and JavaScript, no build step.
-- `src-tauri/` — the desktop shell. Its own workspace, its own CI job.
+Verified end to end on 2026-09-20 by driving the real window, and on 2026-09-21 by installing `branchy-cli` from crates.io into a clean location and running it.
 
-Verified end to end on 2026-09-20 by driving the real window: typed `done lock` into its command line, created a task through the form, edited its priority, renamed a direction, and pressed `U` to take a change back. Each one reached the document on disk.
+**A change to a published crate reaches nobody until its version is bumped and it is published again.** crates.io refuses a version it already holds, and versions can be yanked but never deleted. Bump deliberately, and publish in dependency order: core, app, cli.
 
-No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by driving the shell. Two bugs found that way and not by any test: a shortcut key leaking into the field its own dialog had just focused, and `Enter` saving from only one of the form's inputs. Both are the kind only running the thing finds.
-
-- `crates/branchy-core` — `id.rs`, `node.rs`, `error.rs`, `graph.rs`, `command.rs`, `parse.rs`. Zero dependencies.
-- `crates/branchy-cli` — the `branchy` binary. Depends on clap, serde, serde_json, directories.
-- 62 integration tests plus a doctest, all passing, clean under `clippy --all-targets -D warnings`.
+No automated tests cover the frontend yet. It is checked by opening `ui/index.html` in a browser, or by driving the shell. Two bugs found that way and not by any test: a shortcut key leaking into the field its own dialog had just focused, and `Enter` saving from only one of the form's inputs.
 
 Invariants worth not breaking:
 
 - Ids are never reused, including after an undone removal. A withdrawn id may already have been seen by another device.
 - Every derived computation terminates on a cyclic graph.
-- The on-disk format lives in `branchy-cli/src/store.rs`, written by hand and versioned, never derived from the core's internal layout. Phase 3 swaps its body for Automerge behind `load` and `save`.
+- The on-disk format lives in `branchy-app/src/store.rs`, written by hand and versioned, never derived from the core's internal layout. New fields are optional with a default, so older documents keep loading. Phase 3 swaps its body for Automerge behind `load` and `save`.
 - Saves are written to a sibling file and renamed over the target. A half-written document is exactly what a sync tool would propagate everywhere.
+- `BRANCHY_FILE` wins over the per-user data directory in every front end. That directory comes from `XDG_DATA_HOME` or `HOME`, which sandboxes rewrite, so without the override a snap-confined process silently opens a second empty graph.
 
 `concept.md` is an untracked personal draft.
 
@@ -90,7 +91,9 @@ Invariants worth not breaking:
 - ~~Node id type, area representation, priority representation.~~ Settled: `NodeId`/`AreaId` are newtypes over `u64` handed out by the graph, areas are one field on a node in a single graph, priority is a `u8` where higher sorts earlier.
 - ~~Tauri prerequisites on this Linux machine.~~ Installed on 2026-09-20; the shell builds and runs. `libxdo` turned out not to be needed after all.
 - Whether "done" is called "unlocked" in the UI skin.
-- Time: due dates, recurring tasks, partial progress. `concept.md` asks for calendar planning and none of it exists. Deciding this changes the data model, so it comes before sync rather than after.
+- ~~Due dates.~~ Done on 2026-09-20: deadlines that propagate backwards, a calendar view, urgency in the queue.
+- **Still open: partial progress and recurrence.** "150 problems, 40 done" and "gym three times a week" do not fit a done flag. Recurrence in particular does not fit a DAG node at all and may want to be a different kind of thing. Either changes the data model, so decide before phase 3 rather than after.
+- **Sync is not built.** Two devices each have their own independent document today. Putting the JSON in Syncthing before phase 3 is unsafe: concurrent edits produce `*.sync-conflict-*` files and nothing merges them.
 
 ## Running the desktop shell
 
