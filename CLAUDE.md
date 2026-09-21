@@ -80,6 +80,7 @@ Invariants worth not breaking:
 - Every derived computation terminates on a cyclic graph.
 - The on-disk format lives in `branchy-app/src/store.rs`, written by hand and versioned, never derived from the core's internal layout. New fields are optional with a default, so older documents keep loading. Phase 3 swaps its body for Automerge behind `load` and `save`.
 - Saves are written to a sibling file and renamed over the target. A half-written document is exactly what a sync tool would propagate everywhere. The target is resolved through symlinks first: renaming over a link replaces the link, and the link and its file then silently fork.
+- The window keeps no copy of the graph. Every command reads the file, applies, and saves, exactly as the terminal does, so neither front end can save over a change the other made. A copy held since startup did exactly that. The window also rereads the file when it regains focus, so a change typed in the terminal shows up on switching back.
 - `BRANCHY_FILE` wins over the per-user data directory in every front end. That directory comes from `XDG_DATA_HOME` or `HOME`, which sandboxes rewrite, so without the override a snap-confined process silently opens a second empty graph.
 
 `concept.md` is an untracked personal draft.

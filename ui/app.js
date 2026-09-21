@@ -171,6 +171,24 @@
     });
   }
 
+  // The terminal edits the same document, and coming back to the window is
+  // when someone expects to see what they typed there. Redrawing only when
+  // something changed keeps a plain alt-tab from disturbing anything.
+  function refreshIfChanged() {
+    if (backend.readOnly) return;
+    backend
+      .snapshot()
+      .then(function (next) {
+        if (JSON.stringify(next) === JSON.stringify(snap)) return;
+        adopt(next);
+        render();
+        paintChrome();
+      })
+      .catch(function () {
+        /* the next command reports whatever is wrong with the document */
+      });
+  }
+
   function adopt(next) {
     snap = next;
     byId = {};
@@ -1800,6 +1818,7 @@
 
     backend = B.connect();
     if (backend.readOnly) bannerEl.hidden = false;
+    window.addEventListener("focus", refreshIfChanged);
 
     refresh()
       .then(function () {
