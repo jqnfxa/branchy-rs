@@ -70,8 +70,21 @@ jobs:
           # itself an AppImage and needs FUSE to start
           sudo apt-get install -y libfuse2
 
+      - uses: cargo-bins/cargo-binstall@v1.24.0
+
       - name: Install the Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        shell: bash
+        run: |
+          # A prebuilt binary in seconds, instead of compiling the CLI from
+          # source on two runners for every release, which was the single
+          # longest step in the pipeline. rust-cache deliberately does not
+          # keep ~/.cargo/bin, so the old `cargo install` paid in full every
+          # time. Falls back to building it rather than failing a release if
+          # no prebuilt ever matches this runner.
+          cargo binstall --no-confirm --locked tauri-cli --version "^2" \
+            || cargo install tauri-cli --version "^2" --locked
+          # proves it is actually on PATH, whichever route got it there
+          cargo tauri --version
 
       - name: Build
         working-directory: src-tauri
@@ -110,8 +123,14 @@ jobs:
 
       # WebView2 ships with the runner image and with Windows 11, so there is
       # nothing to install here: the bundler fetches WiX on its own.
+      - uses: cargo-bins/cargo-binstall@v1.24.0
+
       - name: Install the Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        shell: bash
+        run: |
+          cargo binstall --no-confirm --locked tauri-cli --version "^2" \
+            || cargo install tauri-cli --version "^2" --locked
+          cargo tauri --version
 
       - name: Build
         working-directory: src-tauri
