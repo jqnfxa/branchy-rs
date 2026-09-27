@@ -149,6 +149,17 @@ Two things that will waste an hour if rediscovered:
 
 - **Inside a snap-confined terminal** (the VS Code snap, for instance), the loader picks up `/snap/core20/.../libpthread.so.0` and the binary dies with `undefined symbol: __libc_pthread_init`. Launch it with a clean environment: `env -i HOME=$HOME DISPLAY=$DISPLAY XAUTHORITY=$HOME/.Xauthority PATH=/usr/bin:/bin LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu ./target/debug/branchy-desktop`. From an ordinary terminal none of this is needed.
 - **A blank window** on some Linux setups is WebKitGTK's renderer. `WEBKIT_DISABLE_DMABUF_RENDERER=1` and `WEBKIT_DISABLE_COMPOSITING_MODE=1` fix it.
+- **Checking Windows behaviour without Windows.** `sudo apt install mingw-w64 lld`, `rustup target add x86_64-pc-windows-gnu`, then run the suites under Wine:
+
+  ```sh
+  export WINEPREFIX=/tmp/scratch-prefix WINEDLLOVERRIDES="mscoree,mshtml=" WINEDEBUG=-all
+  CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER=wine \
+    cargo test --workspace --target x86_64-pc-windows-gnu
+  ```
+
+  Point `WINEPREFIX` at a scratch folder so the developer's own prefix is left alone. On 2026-09-27 this ran 148 tests green. The three the Linux run has and this one does not are the `#[cfg(unix)]` symlink tests, which cannot exist on Windows. Driving the binary by hand there also confirmed what the suite cannot, because every test sets `BRANCHY_VAULTS`: `Dirs::user()` resolves to `%APPDATA%\jqnfxa\branchy\config\vaults.json`, paths print as `C:\vaults\Work` with no `\\?\` prefix leaking, and the undo stack lands in `.branchy\undo\` inside the vault.
+
+  What this cannot check: the `.msi`, because Tauri's Linux bundler offers only `deb`, `rpm` and `appimage` — WiX is Windows-only, so there is no installer to hand to Wine. Nor the window, which needs WebView2. Only the terminal is checkable this way.
 - **Measuring the frontend**: temporarily add a script to `ui/` that drives the real handlers with synthetic `PointerEvent` and `WheelEvent`, counts `requestAnimationFrame` callbacks over a fixed window, and reports by painting the numbers into a `position:fixed` overlay, which `xwd` can then capture. `document.title` is a dead end: Tauri does not propagate it to the window title, so `xdotool getwindowname` never sees it. Nothing in `ui/` is exposed on `window`, which is what makes driving real events the honest way to measure anyway.
 - **Driving the window from a script** (xdotool plus screenshots): do it on a nested X server, `Xephyr :5 -screen 1280x800 -ac` and `DISPLAY=:5`, not on the display someone is working at. There, the scripted clicks move their real pointer and their scroll wheel reaches the window, and screenshots capture their notifications. Also run the app with a scratch `HOME`: the webview keeps its storage (the interface preferences) under `HOME`, shared with any installed copy of the app, and the folder picker opens on the real Documents folder otherwise. Xephyr with no window manager delivers clicks but no keystrokes, so typed input has to be checked another way.
 
