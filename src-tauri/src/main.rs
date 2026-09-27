@@ -112,6 +112,95 @@ struct VaultsView {
     pinned: bool,
 }
 
+/// The three ways the window can be shown, as a game's display settings have
+/// them. `windowed` is an ordinary decorated window of a chosen size,
+/// `borderless` is an undecorated window filling the monitor, and
+/// `fullscreen` asks the platform for a real fullscreen window.
+const WINDOWED: &str = "windowed";
+const BORDERLESS: &str = "borderless";
+const FULLSCREEN: &str = "fullscreen";
+
+/// How the window is being shown, and what the screen it is on can hold.
+#[derive(Serialize)]
+struct WindowView {
+    mode: &'static str,
+    /// The window's size in logical pixels, which is the unit a size chosen
+    /// in the interface is given in. It may lag a mode change by a frame:
+    /// a resize is a request to the window manager, not an assignment. The
+    /// interface paints its size picker from the stored preference for that
+    /// reason, and reads these only to show what the window settled at.
+    width: f64,
+    height: f64,
+    /// What the monitor the window is on can show, in the same units, so no
+    /// size is offered that would not fit on the screen. `None` when there
+    /// is no monitor to ask, which filters nothing rather than everything.
+    max_width: Option<f64>,
+    max_height: Option<f64>,
+}
+
+/// Reads back what the window actually is, rather than what it was asked to
+/// be. A window manager is free to refuse any of this.
+fn window_view(window: &tauri::Window) -> Result<WindowView, String> {
+    let blame = |e: tauri::Error| e.to_string();
+    let scale = window.scale_factor().map_err(blame)?;
+    let size = window.inner_size().map_err(blame)?.to_logical::<f64>(scale);
+    let mode = if window.is_fullscreen().map_err(blame)? {
+        FULLSCREEN
+    } else if window.is_decorated().map_err(blame)? {
+        WINDOWED
+    } else {
+        BORDERLESS
+    };
+    let screen = window
+        .current_monitor()
+        .map_err(blame)?
+        .map(|monitor| monitor.size().to_logical::<f64>(monitor.scale_factor()));
+    Ok(WindowView {
+        mode,
+        width: size.width,
+        height: size.height,
+        max_width: screen.map(|s: tauri::LogicalSize<f64>| s.width),
+        max_height: screen.map(|s: tauri::LogicalSize<f64>| s.height),
+    })
+}
+
+/// Puts the window into one of the three modes.
+///
+/// Leaving fullscreen comes first everywhere, because a fullscreen window
+/// ignores a size and a position, and the request would be dropped rather
+/// than queued. Decorations are set explicitly in every mode too: coming
+/// back from borderless through the window manager rather than through the
+/// interface would otherwise leave a decorated mode with no decorations.
+fn show_as(window: &tauri::Window, mode: &str, width: f64, height: f64) -> Result<(), String> {
+    let blame = |e: tauri::Error| e.to_string();
+    match mode {
+        FULLSCREEN => {
+            window.set_decorations(true).map_err(blame)?;
+            window.set_fullscreen(true).map_err(blame)?;
+        }
+        BORDERLESS => {
+            window.set_fullscreen(false).map_err(blame)?;
+            window.set_decorations(false).map_err(blame)?;
+            // Fill the monitor this window is on, not the primary one: on a
+            // second screen those are different rectangles.
+            if let Some(screen) = window.current_monitor().map_err(blame)? {
+                window.set_position(*screen.position()).map_err(blame)?;
+                window.set_size(*screen.size()).map_err(blame)?;
+            }
+        }
+        WINDOWED => {
+            window.set_fullscreen(false).map_err(blame)?;
+            window.set_decorations(true).map_err(blame)?;
+            window
+                .set_size(tauri::LogicalSize::new(width, height))
+                .map_err(blame)?;
+            window.center().map_err(blame)?;
+        }
+        other => return Err(format!("{other} is not a window mode")),
+    }
+    Ok(())
+}
+
 /// Which vault the window has open, and the list it chose from.
 struct Desk {
     list: Vaults,
@@ -265,7 +354,7 @@ mod commands {
     use std::path::Path;
     use std::sync::MutexGuard;
 
-    use super::{Desk, Outcome, Shared, Snapshot, VaultsView};
+    use super::{Desk, Outcome, Shared, Snapshot, VaultsView, WindowView};
     use tauri::{AppHandle, Manager, State};
     use tauri_plugin_dialog::DialogExt;
 
@@ -345,6 +434,24 @@ mod commands {
         env!("CARGO_PKG_VERSION")
     }
 
+    #[tauri::command]
+    pub fn window_state(window: tauri::Window) -> Result<WindowView, String> {
+        super::window_view(&window)
+    }
+
+    /// Shows the window as `windowed`, `borderless` or `fullscreen`. The size
+    /// is used by the first only.
+    #[tauri::command]
+    pub fn window_mode(
+        mode: String,
+        width: f64,
+        height: f64,
+        window: tauri::Window,
+    ) -> Result<WindowView, String> {
+        super::show_as(&window, &mode, width, height)?;
+        super::window_view(&window)
+    }
+
     /// Asks for a folder with the system's own picker.
     ///
     /// `async` runs it off the main thread, which the dialog needs free while
@@ -385,7 +492,9 @@ fn main() {
             commands::vault_forget,
             commands::vault_open_last,
             commands::pick_folder,
-            commands::version
+            commands::version,
+            commands::window_state,
+            commands::window_mode
         ])
         .run(tauri::generate_context!())
         .expect("the Branchy window could not start");

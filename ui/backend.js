@@ -53,8 +53,18 @@
       pickFolder: function (title) {
         return invoke("pick_folder", { title: title });
       },
+
+      // The window itself: what it is showing, and how it is shown. Only the
+      // shell owns a window, so the fixture answers null to both and the
+      // interface leaves the whole section out.
       version: function () {
         return invoke("version");
+      },
+      windowState: function () {
+        return invoke("window_state");
+      },
+      windowMode: function (mode, width, height) {
+        return invoke("window_mode", { mode: mode, width: width, height: height });
       },
     };
   }
@@ -98,10 +108,13 @@
       forgetVault: refuse,
       setOpenLast: refuse,
       pickFolder: refuse,
-      // A page opened from disk was never built, so it has no version to
-      // report. Answering null rather than refusing keeps it off the error
-      // banner: nothing went wrong, there is simply nothing to say.
+      // A browser tab is not a window this app may resize, and a page opened
+      // from disk was never built, so it has no version to report. Answering
+      // null rather than refusing keeps these off the error banner: nothing
+      // went wrong, there is simply no window here.
       version: none,
+      windowState: none,
+      windowMode: none,
     };
   }
 

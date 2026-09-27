@@ -18,12 +18,30 @@
 
   var LAYOUTS = ["radial", "layered", "web"];
   var SKINS = ["dark", "light", "nord", "gruvbox", "black"];
+
+  // How the window is shown. The shell applies these; a browser has no window
+  // of its own to resize, so the whole section is left out there.
+  var WIN_MODES = ["windowed", "borderless", "fullscreen"];
+
+  // Sizes offered for windowed mode, in logical pixels. Ordinary screen sizes
+  // rather than anything computed: the point is to pick one and be done, and
+  // the list is filtered at paint time to what the monitor can actually show.
+  // 1280x800 is first because it is the size the window opens at, and the
+  // smallest here still clears the 380x480 minimum in tauri.conf.json.
+  var WIN_SIZES = [
+    [1024, 640], [1280, 720], [1280, 800], [1366, 768], [1440, 900],
+    [1600, 900], [1680, 1050], [1920, 1080], [2560, 1440],
+  ];
+
   var DEFAULTS = {
     lang: "en",
     layout: "radial",
     skin: "dark",
     dockSide: "left",
     motion: "full",
+    winMode: "windowed",
+    winW: 1280,
+    winH: 800,
   };
 
   var backend = null;
@@ -38,6 +56,9 @@
     skin: DEFAULTS.skin,
     dockSide: DEFAULTS.dockSide,
     motion: DEFAULTS.motion,
+    winMode: DEFAULTS.winMode,
+    winW: DEFAULTS.winW,
+    winH: DEFAULTS.winH,
     visible: {},
     focus: null,
     selected: null,
@@ -62,6 +83,15 @@
     });
     if (!langById[state.lang]) state.lang = "en";
     if (SKINS.indexOf(state.skin) < 0) state.skin = DEFAULTS.skin;
+    // A window mode is applied to the real window on startup, so a stored
+    // value that means nothing has to be caught here rather than sent on.
+    if (WIN_MODES.indexOf(state.winMode) < 0) state.winMode = DEFAULTS.winMode;
+    if (!size(state.winW)) state.winW = DEFAULTS.winW;
+    if (!size(state.winH)) state.winH = DEFAULTS.winH;
+  }
+
+  function size(n) {
+    return typeof n === "number" && isFinite(n) && n >= 380;
   }
 
   function savePrefs() {
@@ -1255,7 +1285,7 @@
       ["new", "N"], ["ed.editTitle", "E"], ["ar.title", "A"], ["k.calendar", "C"],
       ["k.command", ":"], ["k.search", "/"], ["k.fit", "F"],
       ["k.queue", "Q"], ["k.layouts", "1 2 3"], ["k.settings", "S"],
-      ["k.close", "Esc"],
+      ["k.window", "F11"], ["k.close", "Esc"],
     ];
     var hintHost = document.getElementById("keyHints");
     hintHost.innerHTML = "";
@@ -1320,6 +1350,104 @@
     paintQueue();
     if (!calendarEl.hidden) paintCalendar();
     if (state.selected) drawInspector(byId[state.selected]);
+  }
+
+  /* ---------- the window itself ---------- */
+
+  // What the monitor can show, in logical pixels, or null when nothing has
+  // been able to say — a browser, or a session with no monitor to ask. Read
+  // once at startup and refreshed on every mode change, which is when a
+  // window can have moved to another screen under its own steam.
+  var screenFits = null;
+
+  // A decorated window is taller than the size asked for, because the title
+  // bar sits outside it, and it is then centred. Without this allowance the
+  // tallest size the screen can hold puts its own title bar off the top.
+  var FRAME = 70;
+
+  function showWindowAs(mode) {
+    if (!backend || backend.kind !== "tauri") return Promise.resolve();
+    state.winMode = mode;
+    savePrefs();
+    // Nothing re-fits the camera afterwards, on purpose: dragging a window
+    // bigger does not move the graph either, and a mode change should not be
+    // the one resize that throws away a pan. F still fits it.
+    return backend
+      .windowMode(mode, state.winW, state.winH)
+      .then(noteScreen)
+      .catch(function (error) {
+        // The window manager is free to refuse any of this, and a refusal is
+        // worth seeing rather than leaving the settings showing a mode the
+        // window is not in.
+        state.winMode = "windowed";
+        savePrefs();
+        failed(error);
+      });
+  }
+
+  function noteScreen(view) {
+    if (view && typeof view.max_width === "number") {
+      screenFits = { w: view.max_width, h: view.max_height };
+    }
+  }
+
+  // The sizes this screen can show, and whatever is stored even when it no
+  // longer fits: a preference made on a bigger monitor should be visible in
+  // its own list rather than silently missing from it.
+  function sizesThatFit() {
+    var list = WIN_SIZES.filter(function (wh) {
+      return !screenFits || (wh[0] <= screenFits.w && wh[1] + FRAME <= screenFits.h);
+    });
+    var known = list.some(function (wh) {
+      return wh[0] === state.winW && wh[1] === state.winH;
+    });
+    if (!known) list.push([state.winW, state.winH]);
+    return list.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+  }
+
+  function windowSettings() {
+    var host = document.createElement("div");
+    host.appendChild(choiceRow(
+      t("set.window"), t("set.windowNote"),
+      WIN_MODES.map(function (id) {
+        return {
+          id: id,
+          label: t("win." + id),
+          kb: id === "fullscreen" ? "F11" : null,
+        };
+      }),
+      state.winMode,
+      function (id) { showWindowAs(id).then(paintSettings); }
+    ));
+
+    // The other two modes take the size of the screen, so there is nothing
+    // to choose there.
+    if (state.winMode !== "windowed") return host;
+
+    var field = document.createElement("div");
+    field.className = "field";
+    var label = document.createElement("label");
+    label.setAttribute("for", "winSize");
+    label.textContent = t("set.winSize");
+    var picker = document.createElement("select");
+    picker.id = "winSize";
+    sizesThatFit().forEach(function (wh) {
+      var option = document.createElement("option");
+      option.value = wh[0] + "x" + wh[1];
+      option.textContent = wh[0] + " \u00d7 " + wh[1];
+      if (wh[0] === state.winW && wh[1] === state.winH) option.selected = true;
+      picker.appendChild(option);
+    });
+    picker.onchange = function () {
+      var parts = picker.value.split("x");
+      state.winW = Number(parts[0]);
+      state.winH = Number(parts[1]);
+      showWindowAs("windowed");
+    };
+    field.appendChild(label);
+    field.appendChild(picker);
+    host.appendChild(field);
+    return host;
   }
 
   /* ---------- settings ---------- */
@@ -1431,6 +1559,10 @@
         paintSettings();
       }
     ));
+
+    // Only the shell has a window to show differently. In a browser there is
+    // nothing here to offer, so the section is absent rather than disabled.
+    if (backend && backend.kind === "tauri") body.appendChild(windowSettings());
   }
 
   function vaultSettings() {
@@ -2220,6 +2352,14 @@
   }
 
   function onKey(ev) {
+    // The window's own shortcut, and the way out of a mode that hides the
+    // close button. It comes before every other guard for that reason: a
+    // fullscreen window a dialog can trap you in is worse than no shortcut.
+    if (ev.key === "F11") {
+      ev.preventDefault();
+      showWindowAs(state.winMode === "fullscreen" ? "windowed" : "fullscreen");
+      return;
+    }
     // the graph's shortcuts mean nothing behind the vault screen
     if (!vaultsEl.hidden) return;
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
@@ -2235,6 +2375,7 @@
       if (typing) { qInput.value = ""; state.query = ""; updateEmphasis(); qInput.blur(); }
       else if (!queueEl.hidden) toggleQueue(false);
       else if (!calendarEl.hidden) toggleCalendar(false);
+      else if (state.winMode !== "windowed") showWindowAs("windowed");
       else select(null);
       return;
     }
@@ -2275,11 +2416,21 @@
     window.addEventListener("focus", onFocus);
 
     // Which build this is. Dim, in the corner of the wordmark, because it is
-    // the answer to a question asked about twice a year — but one nobody
-    // could answer from a running window before.
+    // the answer to a question asked about twice a year.
     backend.version().then(function (v) {
       if (v) document.getElementById("ver").textContent = "v" + v;
-    }, function () { /* nothing to report: the slot stays empty */ });
+    }, function () { /* no window to ask: the slot stays empty */ });
+
+    backend.windowState().then(function (view) {
+      noteScreen(view);
+      // Only when the preference differs from how the window already opens.
+      // Applying "windowed 1280x800" on every start would also re-centre it,
+      // taking away a position chosen with the mouse.
+      if (state.winMode !== DEFAULTS.winMode ||
+          state.winW !== DEFAULTS.winW || state.winH !== DEFAULTS.winH) {
+        showWindowAs(state.winMode);
+      }
+    }, function () { /* nothing to restore */ });
 
     backend
       .vaults()
