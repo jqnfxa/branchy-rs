@@ -66,7 +66,7 @@ A **vault** is a folder holding one graph, as in Obsidian, so separate jobs get 
 cd src-tauri && cargo build && ./target/debug/branchy-desktop
 ```
 
-It opens on your recent vaults, or straight into the last one if you tick the box. The same graph, drawn as a skill tree. Three layouts, a queue and a calendar, search, task and direction editing, and the same command line behind `:` or Ctrl+K. Five themes, and the interface in English, Russian, German, Polish or Japanese.
+It opens on your recent vaults, or straight into the last one if you tick the box. The same graph, drawn as a skill tree. Three layouts, a queue and a calendar, search, task and direction editing, and the same command line behind `:` or Ctrl+K — press `?` there for every command with an example. Windowed, borderless or full screen with F11. Five themes, and the interface in English, Russian, German, Polish or Japanese.
 
 ## Stack
 
