@@ -77,13 +77,23 @@ jobs:
         working-directory: src-tauri
         run: cargo tauri build --bundles deb,appimage
 
+      # Gathered into one flat folder first. Given several path patterns,
+      # upload-artifact keeps the directory structure they have in common, so
+      # the two files would arrive as deb/... and appimage/..., a level deeper
+      # than the publishing job goes looking. That silently cost 0.2.4 both of
+      # its Linux artifacts while every job still reported success.
+      - name: Collect the bundles
+        run: |
+          mkdir -p dist
+          cp src-tauri/target/release/bundle/deb/*.deb dist/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage dist/
+          ls -l dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: linux
           if-no-files-found: error
-          path: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
+          path: dist/*
 
   windows:
     name: .msi
@@ -121,6 +131,26 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+
+      # fail_on_unmatched_files only proves the pattern found something. In
+      # 0.2.4 it found the .msi and published that alone, and nothing failed.
+      # So name what has to be there and refuse to publish without it.
+      - name: Everything that has to ship is here
+        shell: bash
+        run: |
+          shopt -s nullglob
+          # deliberately the same pattern the publishing step uploads, not a
+          # recursive find: 0.2.4 had every file present and still shipped one
+          # of them, because they sat a level below where the pattern looked
+          found=(artifacts/*/*)
+          printf '%s\n' "${found[@]}"
+          for ext in deb AppImage msi; do
+            match=(artifacts/*/*."$ext")
+            if [ ${#match[@]} -eq 0 ]; then
+              echo "::error::nothing matching artifacts/*/*.$ext, which is what gets published"
+              exit 1
+            fi
+          done
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2

@@ -79,7 +79,7 @@ Consequences that bind every phase:
 | `branchy-desktop` | `src-tauri/`, not published | The window. Its own workspace and CI job. |
 | — | `ui/` | The frontend. Plain HTML, CSS and JavaScript, no build step. |
 
-Verified end to end on 2026-09-20 by driving the real window, and on 2026-09-21 by installing `branchy-cli` from crates.io into a clean location and running it. Vaults were driven in the window on 2026-09-21 on a nested X server: the vault screen, opening, creating through the folder picker, opening a folder, closing, forgetting, reopening the last vault on start, and switching language.
+Verified on Windows 11 on 2026-09-27: the `.msi` from the v0.2.4 release installs and the window runs. The terminal is checked on Windows semantics from Linux under Wine, see Tooling. Verified end to end on 2026-09-20 by driving the real window, and on 2026-09-21 by installing `branchy-cli` from crates.io into a clean location and running it. Vaults were driven in the window on 2026-09-21 on a nested X server: the vault screen, opening, creating through the folder picker, opening a folder, closing, forgetting, reopening the last vault on start, and switching language.
 
 **A change to a published crate reaches nobody until its version is bumped and it is published again.** crates.io refuses a version it already holds, and versions can be yanked but never deleted. Bump deliberately, and publish in dependency order: core, app, cli.
 
@@ -167,6 +167,7 @@ Two things that will waste an hour if rediscovered:
 
 - Toolchain pinned by `rust-toolchain.toml` (stable, with rustfmt and clippy). Edition 2024, `rust-version = "1.85"`.
 - Workspace lints in the root `Cargo.toml`: `unsafe_code = "forbid"`, clippy `all` and `pedantic` at warn. Member crates opt in with `[lints] workspace = true`. When `src-tauri` is added, opt in too, and only downgrade for that crate if Tauri's generated code trips a lint.
+- **`upload-artifact` given several path patterns keeps the directory structure they share.** Two patterns under `bundle/deb/` and `bundle/appimage/` arrive as `deb/...` and `appimage/...`, a level below a single-pattern upload. In 0.2.4 that put both Linux artifacts out of reach of the publishing step's `artifacts/*/*`, and the release went out with only the `.msi` while all four jobs reported success. `fail_on_unmatched_files` does not catch it: it only proves the pattern matched *something*. The fix is to gather the bundles into one flat folder before uploading, and to check the exact pattern that will be published rather than a recursive `find`.
 - **A workflow runs as it exists at the commit the tag points at.** Changing `release.yml` does nothing for a tag that already exists; the change reaches a release only from the next tag made after it, or by moving a tag that has not been pushed yet.
 - CI (`.github/workflows/ci.yml`) has two jobs on Ubuntu and Windows: one for the workspace (fmt on Linux, `clippy -D warnings`, tests) and one for `src-tauri`, which installs the Linux webview first because the shell is excluded from the workspace.
 - Check locally with:
