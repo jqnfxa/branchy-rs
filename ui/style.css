@@ -56,6 +56,78 @@ body[data-skin="light"]{
   --a-social:#c94a63;
 }
 
+/* Three palettes people already read code in. Each one redefines the same
+   set the light skin does and nothing else, so a theme is a block of
+   variables and never a rule of its own. The area colours in the tree come
+   from the document, not from here: these are the chrome accents. */
+body[data-skin="nord"]{
+  color-scheme: dark;
+  --bg:#2e3440;
+  --bg-elevated:#3b4252;
+  --bg-card:#3b4252;
+  --bg-sunken:#272b35;
+  --stage-glow:#353d4c;
+  --line:#4c566a;
+  --line-soft:#434c5e;
+  --locked:#4c566a;
+  --text:#eceff4;
+  --text-dim:#9aa5b8;
+  --danger:#bf616a;
+  --on-accent:#2e3440;
+  --shadow:rgba(0,0,0,.45);
+
+  --a-hard:#88c0d0;
+  --a-career:#ebcb8b;
+  --a-health:#a3be8c;
+  --a-social:#b48ead;
+}
+
+body[data-skin="gruvbox"]{
+  color-scheme: dark;
+  --bg:#282828;
+  --bg-elevated:#32302f;
+  --bg-card:#3c3836;
+  --bg-sunken:#1d2021;
+  --stage-glow:#32302f;
+  --line:#504945;
+  --line-soft:#3c3836;
+  --locked:#665c54;
+  --text:#ebdbb2;
+  --text-dim:#a89984;
+  --danger:#fb4934;
+  --on-accent:#1d2021;
+  --shadow:rgba(0,0,0,.5);
+
+  --a-hard:#8ec07c;
+  --a-career:#fabd2f;
+  --a-health:#b8bb26;
+  --a-social:#d3869b;
+}
+
+/* True black, so an OLED panel switches those pixels off entirely. Worth
+   having before the phone build, where it is also a battery setting. */
+body[data-skin="black"]{
+  color-scheme: dark;
+  --bg:#000000;
+  --bg-elevated:#0b0b10;
+  --bg-card:#101017;
+  --bg-sunken:#000000;
+  --stage-glow:#07070d;
+  --line:#2a2a37;
+  --line-soft:#1b1b25;
+  --locked:#33333f;
+  --text:#f2f3f8;
+  --text-dim:#8b8b9c;
+  --danger:#ff5f6b;
+  --on-accent:#000000;
+  --shadow:rgba(0,0,0,.8);
+
+  --a-hard:#4fd1c5;
+  --a-career:#eab64d;
+  --a-health:#8fd17c;
+  --a-social:#ef8093;
+}
+
 *{box-sizing:border-box}
 img{max-width:100%}
 [hidden]{display:none!important}

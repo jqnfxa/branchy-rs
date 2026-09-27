@@ -17,6 +17,7 @@
   });
 
   var LAYOUTS = ["radial", "layered", "web"];
+  var SKINS = ["dark", "light", "nord", "gruvbox", "black"];
   var DEFAULTS = {
     lang: "en",
     layout: "radial",
@@ -60,6 +61,7 @@
       if (stored[key] !== undefined) state[key] = stored[key];
     });
     if (!langById[state.lang]) state.lang = "en";
+    if (SKINS.indexOf(state.skin) < 0) state.skin = DEFAULTS.skin;
   }
 
   function savePrefs() {
@@ -1394,7 +1396,7 @@
 
     body.appendChild(choiceRow(
       t("set.theme"), null,
-      [{ id: "dark", label: t("th.dark") }, { id: "light", label: t("th.light") }],
+      SKINS.map(function (id) { return { id: id, label: t("th." + id) }; }),
       state.skin,
       function (id) {
         state.skin = id;
