@@ -3,6 +3,10 @@ name: Release
 # A tag like v0.1.1 builds the desktop shell and publishes it as a GitHub
 # release. The crates go to crates.io separately, by hand, because a version
 # there can never be deleted and that is not a step to hand to a bot.
+#
+# Three artifacts, built on three different machines and published together by
+# a final job, so that a half-finished release never appears: the .deb for the
+# Debian family, an AppImage for every other Linux, and the .msi for Windows.
 
 on:
   push:
@@ -15,12 +19,37 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  deb:
-    name: .deb
+  # Cheap, and it runs before anything expensive: a tag that disagrees with
+  # the sources would otherwise be found out after two full release builds.
+  check:
+    name: version
+    runs-on: ubuntu-latest
+    outputs:
+      number: ${{ steps.version.outputs.number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag has to match the version being shipped
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          conf=$(grep -m1 '"version"' src-tauri/tauri.conf.json | sed -E 's/.*"([0-9][^"]*)".*/\1/')
+          crate=$(grep -m1 '^version' src-tauri/Cargo.toml | sed -E 's/.*"([^"]*)".*/\1/')
+          echo "tag=$tag tauri.conf.json=$conf src-tauri/Cargo.toml=$crate"
+          if [ "$tag" != "$conf" ] || [ "$tag" != "$crate" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the version in the sources"
+            exit 1
+          fi
+          # the tag carries a v, the package filename does not
+          echo "number=$tag" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: .deb and AppImage
+    needs: check
     # Deliberately not ubuntu-latest. A .deb links against the glibc of the
     # machine that built it, so one built on 24.04 refuses to start on 22.04 or
     # Debian 12. Building on the oldest supported base is what makes it run on
-    # everything newer.
+    # everything newer, and the AppImage inherits the same property.
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -37,48 +66,97 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev \
             librsvg2-dev libayatana-appindicator3-dev \
             build-essential curl wget file libssl-dev
+          # linuxdeploy, which the AppImage bundler downloads and runs, is
+          # itself an AppImage and needs FUSE to start
+          sudo apt-get install -y libfuse2
 
       - name: Install the Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
 
-      - name: The tag has to match the version being shipped
-        id: version
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          conf=$(grep -m1 '"version"' src-tauri/tauri.conf.json | sed -E 's/.*"([0-9][^"]*)".*/\1/')
-          crate=$(grep -m1 '^version' src-tauri/Cargo.toml | sed -E 's/.*"([^"]*)".*/\1/')
-          echo "tag=$tag tauri.conf.json=$conf src-tauri/Cargo.toml=$crate"
-          if [ "$tag" != "$conf" ] || [ "$tag" != "$crate" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match the version in the sources"
-            exit 1
-          fi
-          # the tag carries a v, the package filename does not
-          echo "number=$tag" >> "$GITHUB_OUTPUT"
+      - name: Build
+        working-directory: src-tauri
+        run: cargo tauri build --bundles deb,appimage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+
+  windows:
+    name: .msi
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # WebView2 ships with the runner image and with Windows 11, so there is
+      # nothing to install here: the bundler fetches WiX on its own.
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
 
       - name: Build
         working-directory: src-tauri
-        run: cargo tauri build --bundles deb
+        run: cargo tauri build --bundles msi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          if-no-files-found: error
+          path: src-tauri/target/release/bundle/msi/*.msi
+
+  publish:
+    name: publish
+    needs: [check, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
           name: Branchy ${{ github.ref_name }}
-          files: src-tauri/target/release/bundle/deb/*.deb
+          files: artifacts/*/*
           fail_on_unmatched_files: true
           body: |
             ## Install
 
+            **Debian, Ubuntu, Mint, Pop!_OS**
+
             ```sh
-            sudo apt install ./Branchy_${{ steps.version.outputs.number }}_amd64.deb
+            sudo apt install ./Branchy_${{ needs.check.outputs.number }}_amd64.deb
             ```
 
             Installing through `apt` rather than `dpkg -i` pulls in the webview libraries the window needs.
 
             Installing straight from `~/Downloads` may print `N: Download is performed unsandboxed as root ... couldn't be accessed by user '_apt'`. That is a notice, not an error, and the package installs. Recent Ubuntu keeps home folders private, so apt's unprivileged user cannot read the file and apt reads it as root instead. Installing from `/tmp` avoids the message.
 
-            Built on Ubuntu 22.04, so it runs there and on anything newer, including Debian 12.
+            **Any other Linux** — Fedora, openSUSE, Arch and the rest:
 
-            The command line on its own, without the window, is on crates.io:
+            ```sh
+            chmod +x Branchy_${{ needs.check.outputs.number }}_amd64.AppImage
+            ./Branchy_${{ needs.check.outputs.number }}_amd64.AppImage
+            ```
+
+            The AppImage carries its own webview, so there is nothing to install. It needs FUSE, which most desktops already have; on a system without it, run it with `--appimage-extract-and-run`.
+
+            Both Linux builds are made on Ubuntu 22.04, so they run there and on anything newer, including Debian 12.
+
+            **Windows 10 and 11**: run the `.msi`. WebView2 is already present on Windows 11 and on any updated Windows 10.
+
+            Both desktop builds are x86_64. There is no arm64 build yet, and no macOS build at all.
+
+            The command line on its own, without the window, works on Linux, Windows and macOS:
 
             ```sh
             cargo install branchy-cli

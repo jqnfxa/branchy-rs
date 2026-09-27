@@ -69,7 +69,7 @@ Consequences that bind every phase:
 
 ## Status
 
-**Phases 1 and 2 are done, and vaults (0.2.0) on top of them.** First published on crates.io as v0.1.0 on 2026-09-21; 0.1.1 and 0.1.2 followed the same day with fixes, and 0.2.0 added vaults. Each `v*` tag also publishes the desktop shell as a `.deb` on GitHub Releases (`.github/workflows/release.yml`).
+**Phases 1 and 2 are done, and vaults (0.2.0) on top of them.** First published on crates.io as v0.1.0 on 2026-09-21; 0.1.1 and 0.1.2 followed the same day with fixes, and 0.2.0 added vaults. Each `v*` tag also publishes the desktop shell on GitHub Releases (`.github/workflows/release.yml`): a `.deb` for the Debian family, an AppImage for every other Linux, and an `.msi` for Windows, built on three runners and published by one final job so a half-finished release never appears. Both Linux artifacts are built on Ubuntu 22.04 so they run on anything newer. All of it is x86_64; there is no arm64 build and no macOS build.
 
 | Crate | Where | What |
 | --- | --- | --- |
@@ -156,6 +156,7 @@ Two things that will waste an hour if rediscovered:
 
 - Toolchain pinned by `rust-toolchain.toml` (stable, with rustfmt and clippy). Edition 2024, `rust-version = "1.85"`.
 - Workspace lints in the root `Cargo.toml`: `unsafe_code = "forbid"`, clippy `all` and `pedantic` at warn. Member crates opt in with `[lints] workspace = true`. When `src-tauri` is added, opt in too, and only downgrade for that crate if Tauri's generated code trips a lint.
+- **A workflow runs as it exists at the commit the tag points at.** Changing `release.yml` does nothing for a tag that already exists; the change reaches a release only from the next tag made after it, or by moving a tag that has not been pushed yet.
 - CI (`.github/workflows/ci.yml`) has two jobs on Ubuntu and Windows: one for the workspace (fmt on Linux, `clippy -D warnings`, tests) and one for `src-tauri`, which installs the Linux webview first because the shell is excluded from the workspace.
 - Check locally with:
 
