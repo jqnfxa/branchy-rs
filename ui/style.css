@@ -168,8 +168,11 @@ body{
   background:var(--a-hard);box-shadow:0 0 10px var(--a-hard);align-self:center;
 }
 .brand small{
-  font-family:var(--body);font-weight:500;font-size:11px;
-  letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim);
+  font-family:var(--mono);font-weight:400;font-size:10.5px;
+  letter-spacing:.06em;color:var(--text-dim);opacity:.55;
+  /* It answers "which build is this?" and is never worth reading twice, so
+     it stays out of the way of a drag across the top bar. */
+  -webkit-user-select:text;user-select:text;
 }
 
 .seg{

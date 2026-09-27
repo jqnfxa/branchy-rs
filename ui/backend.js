@@ -53,6 +53,9 @@
       pickFolder: function (title) {
         return invoke("pick_folder", { title: title });
       },
+      version: function () {
+        return invoke("version");
+      },
     };
   }
 
@@ -95,7 +98,15 @@
       forgetVault: refuse,
       setOpenLast: refuse,
       pickFolder: refuse,
+      // A page opened from disk was never built, so it has no version to
+      // report. Answering null rather than refusing keeps it off the error
+      // banner: nothing went wrong, there is simply nothing to say.
+      version: none,
     };
+  }
+
+  function none() {
+    return Promise.resolve(null);
   }
 
   function refuse() {

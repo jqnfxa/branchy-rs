@@ -335,6 +335,16 @@ mod commands {
         desk(&shared)?.set_open_last(on).map_err(|e| e.to_string())
     }
 
+    /// What the window says it is when asked.
+    ///
+    /// `tauri.conf.json` and this crate's manifest carry the same number, and
+    /// the release checklist bumps both, so either is the version. Taking it
+    /// from the binary means a build can never report a version it is not.
+    #[tauri::command]
+    pub fn version() -> &'static str {
+        env!("CARGO_PKG_VERSION")
+    }
+
     /// Asks for a folder with the system's own picker.
     ///
     /// `async` runs it off the main thread, which the dialog needs free while
@@ -374,7 +384,8 @@ fn main() {
             commands::vault_close,
             commands::vault_forget,
             commands::vault_open_last,
-            commands::pick_folder
+            commands::pick_folder,
+            commands::version
         ])
         .run(tauri::generate_context!())
         .expect("the Branchy window could not start");

@@ -2274,6 +2274,13 @@
     if (backend.readOnly) bannerEl.hidden = false;
     window.addEventListener("focus", onFocus);
 
+    // Which build this is. Dim, in the corner of the wordmark, because it is
+    // the answer to a question asked about twice a year — but one nobody
+    // could answer from a running window before.
+    backend.version().then(function (v) {
+      if (v) document.getElementById("ver").textContent = "v" + v;
+    }, function () { /* nothing to report: the slot stays empty */ });
+
     backend
       .vaults()
       .then(function (view) {
