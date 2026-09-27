@@ -40,7 +40,17 @@ Differentiator versus existing apps: cross-cutting dependency gating plus one gr
 ## Platforms
 
 - **Linux and Windows** — desktop, Tauri 2. Both first class. CI already runs fmt, clippy and tests on Ubuntu and Windows.
-- **Android** — Tauri 2's Android target, same Rust core and same web frontend. A committed target, not a maybe.
+- **Android** — Tauri 2's Android target, same Rust core and same web frontend. A committed target, not a maybe. Not started, and deliberately so: the app is desktop-only for now.
+
+  What was settled on 2026-09-27, before any code moved:
+
+  - **The build is the easy part; storage is the problem.** A vault is a folder and the recent list is absolute paths. Android has no user-visible filesystem of that shape.
+  - **Distribution decides storage.** The eventual target is Google Play, and Play restricts `MANAGE_EXTERNAL_STORAGE` to file managers and backup tools, so a direct path under `/sdcard` is not available. That forces the Storage Access Framework: the user picks a folder and the app gets a `content://` URI and a `ContentResolver`, never a path.
+  - **SAF breaks the atomic save.** There is no reliable rename-over-an-existing-document, so the write-a-sibling-and-rename invariant has no direct equivalent and needs a design of its own. This is the single hardest part and it should not be discovered late.
+  - `directories` has no sensible Android answer and would fail with `NoHome`. Solved ahead of time by the `Dirs` injection above, which is desktop-only work and already shipped.
+  - Testing will be on an emulator the maintainer sets up; there is no device here, so nothing about Android may be called supported on the strength of it compiling.
+
+  Order when it starts: a storage abstraction behind `load` and `save`, then the toolchain, then the build.
 - **iOS** — unsupported. Building and signing need macOS hardware that is not available here. Nothing in the design may make it impossible to add later, so do not paint iOS into a corner.
 
 Consequences that bind every phase:
@@ -87,6 +97,8 @@ Invariants worth not breaking:
 - Which document a command works on, in every front end: `--file`, then `--vault`, then `BRANCHY_FILE`, then the vault opened last. `BRANCHY_FILE` pins a front end to one file and leaves the vault list alone; the window opens that file directly instead of the vault screen.
 - Anything that holds the vault list for longer than one command (the window) rereads it before changing it, for the same reason the window rereads the graph.
 - A vault whose folder has gone is reported, never recreated: a save would otherwise make the folder again, silently.
+- **`branchy-app` does not discover its own directories.** `Dirs::user()` derives them from the platform's conventions, and anything whose host tells it instead builds a `Dirs` and passes it in. The forms that take one — `Vaults::for_dirs`, `store::default_path_in` — read no environment variable and are pure functions of it, which is what lets them be tested without touching the environment the rest of the process shares. Discovery and the `BRANCHY_*` overrides live only at the edge, in `Dirs::user`, `Vaults::user` and `store::default_path`. The reason is Android, which has no home directory to derive anything from, while the crate still has to work with no Tauri at all because the CLI links it.
+- **The desktop shell keeps using `Dirs::user()` on purpose.** Tauri's own path API would answer `~/.config/dev.jqnfxa.branchy` where `directories` answers `~/.config/branchy`, so switching would orphan an existing vault list. The injection exists for a platform that has no other answer, not to replace the one that works.
 - `BRANCHY_VAULTS` names the list file and turns off adopting a pre-vault graph from the old data directory. **Every test that reaches the vault list sets it and clears `BRANCHY_FILE`**, or it reads the developer's real list or follows their environment into their real graph.
 
 `concept.md` is an untracked personal draft.
