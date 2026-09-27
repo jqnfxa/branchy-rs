@@ -279,8 +279,16 @@ kbd{
   position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
   background:radial-gradient(1100px 780px at 50% 46%, var(--stage-glow) 0%, var(--bg) 62%);
   cursor:grab;touch-action:none;
+  /* Panning is a press and drag across a surface covered in SVG <text>, which
+     is exactly the gesture that selects text, so every pan used to leave the
+     labels it swept highlighted. pointer-events:none on a label does not stop
+     it, because a selection is not a pointer event. */
+  -webkit-user-select:none;user-select:none;
 }
 .stage.grabbing{cursor:grabbing}
+/* The panels over the stage hold names and dates worth copying, so they opt
+   back in. They are not the drag surface, so nothing sweeps through them. */
+.stage .queue,.stage .empty-state{-webkit-user-select:text;user-select:text}
 #canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 
 .zoom{position:absolute;inset-inline-end:12px;bottom:12px;display:flex;flex-direction:column;gap:5px;z-index:3}
