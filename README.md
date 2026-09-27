@@ -16,7 +16,28 @@ A dependency-aware, tree-alike TODO list. Break a goal into branches, unlock the
 
 Personal use first. PC first (Linux and Windows), mobile later.
 
+## Install
+
+**The window**, from [Releases](https://github.com/jqnfxa/branchy-rs/releases):
+
+```sh
+sudo apt install ./Branchy_*_amd64.deb      # Debian, Ubuntu, Mint, Pop!_OS
+chmod +x Branchy_*_amd64.AppImage           # every other Linux, nothing to install
+```
+
+On Windows 10 (version 1803 or newer) and Windows 11, run the `.msi`. It is unsigned, so Windows shows a SmartScreen warning first: **More info → Run anyway**. Both desktop builds are x86_64; there is no arm64 build and no macOS build.
+
+**The terminal**, on Linux, Windows or macOS:
+
+```sh
+cargo install branchy-cli
+```
+
+Both read the same vaults, so you can use either or both.
+
 ## Try it
+
+From a clone, without installing anything:
 
 ```sh
 cargo run --bin branchy -- vault new Plans           # a folder holding one graph
@@ -45,7 +66,7 @@ A **vault** is a folder holding one graph, as in Obsidian, so separate jobs get 
 cd src-tauri && cargo build && ./target/debug/branchy-desktop
 ```
 
-It opens on your recent vaults, or straight into the last one if you tick the box. The same graph, drawn as a skill tree. Three layouts, a queue and a calendar, search, task and direction editing, and the same command line behind `:` or Ctrl+K.
+It opens on your recent vaults, or straight into the last one if you tick the box. The same graph, drawn as a skill tree. Three layouts, a queue and a calendar, search, task and direction editing, and the same command line behind `:` or Ctrl+K. Five themes, and the interface in English, Russian, German, Polish or Japanese.
 
 ## Stack
 

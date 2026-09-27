@@ -201,7 +201,9 @@ jobs:
 
             Both Linux builds are made on Ubuntu 22.04, so they run there and on anything newer, including Debian 12.
 
-            **Windows 10 and 11**: run the `.msi`. WebView2 is already present on Windows 11 and on any updated Windows 10.
+            **Windows 10 (version 1803 or newer) and Windows 11**: run the `.msi`. WebView2 is already present on Windows 11 and on any updated Windows 10, and the installer fetches it if it is not.
+
+            The installer is not code signed, so Windows shows a SmartScreen warning first: **More info → Run anyway**.
 
             Both desktop builds are x86_64. There is no arm64 build yet, and no macOS build at all.
 
