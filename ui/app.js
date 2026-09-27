@@ -33,6 +33,32 @@
     [1600, 900], [1680, 1050], [1920, 1080], [2560, 1440],
   ];
 
+  // The whole grammar, for the guide behind the ? in the command line. Verbs,
+  // syntax and examples are the language the parser speaks, so they are not
+  // translated; only the sentence about each one is. Every example here was
+  // run through `branchy run` before it was written down, because a reference
+  // that does not work is worse than none.
+  var GRAMMAR = [
+    { k: "add",
+      s: 'add <name> [in <direction>] [after a, b] [before c] [pri n] [note "…"] [due YYYY-MM-DD]',
+      e: 'add "Calculus" in hard after school pri 6 due 2027-03-01' },
+    { k: "done", s: "done <task>", e: "done calculus" },
+    { k: "undone", s: "undone <task>", e: "undone calculus" },
+    { k: "link", s: "link <a> after <b>   ·   link <a> before <b>",
+      e: "link probability after calculus" },
+    { k: "unlink", s: "unlink <a> after <b>", e: "unlink probability after calculus" },
+    { k: "pri", s: "pri <task> <0-255>", e: "pri calculus 8" },
+    { k: "due", s: "due <task> <YYYY-MM-DD | none>", e: "due calculus 2027-03-01" },
+    { k: "note", s: "note <task> <text>", e: 'note calculus "Stewart, chapters 1-6"' },
+    { k: "rename", s: "rename <task> <name>", e: 'rename calculus "Calculus I"' },
+    { k: "move", s: "move <task> in <direction>", e: "move probability in hard" },
+    { k: "rm", s: "rm <task>", e: "rm probability" },
+    { k: "area", s: "area <name> [colour]", e: 'area "Hard skills" #4fd1c5' },
+    { k: "renameArea", s: "rename-area <direction> <name>", e: 'rename-area hard "Hard skills"' },
+    { k: "recolorArea", s: "recolor-area <direction> <colour>", e: "recolor-area hard #f6ad55" },
+    { k: "rmarea", s: "rmarea <direction>", e: "rmarea hard" },
+  ];
+
   var DEFAULTS = {
     lang: "en",
     layout: "radial",
@@ -1352,6 +1378,59 @@
     if (state.selected) drawInspector(byId[state.selected]);
   }
 
+  /* ---------- the command line's own guide ---------- */
+
+  function paintGuide() {
+    var host = document.getElementById("palGuide");
+    host.innerHTML = "";
+    GRAMMAR.forEach(function (entry) {
+      var row = document.createElement("div");
+      row.className = "g";
+
+      // The verb is the first word of the syntax, picked out rather than
+      // repeated on a line of its own.
+      var syntax = document.createElement("code");
+      syntax.className = "sx";
+      var cut = entry.s.indexOf(" ");
+      var verb = document.createElement("b");
+      verb.textContent = cut < 0 ? entry.s : entry.s.slice(0, cut);
+      syntax.appendChild(verb);
+      if (cut >= 0) syntax.appendChild(document.createTextNode(entry.s.slice(cut)));
+      row.appendChild(syntax);
+
+      var said = document.createElement("p");
+      said.textContent = t("g." + entry.k);
+      row.appendChild(said);
+
+      var example = document.createElement("code");
+      example.className = "ex";
+      example.textContent = entry.e;
+      row.appendChild(example);
+
+      host.appendChild(row);
+    });
+
+    ["g.names", "g.sameEdge"].forEach(function (key) {
+      var note = document.createElement("p");
+      note.className = "note";
+      note.textContent = t(key);
+      host.appendChild(note);
+    });
+  }
+
+  function toggleGuide(show) {
+    var host = document.getElementById("palGuide");
+    var button = document.getElementById("palHelp");
+    var open = show === undefined ? host.hidden : show;
+    if (open) {
+      paintGuide();
+      // Opened again, it starts at the top rather than wherever it was left.
+      host.scrollTop = 0;
+    }
+    host.hidden = !open;
+    button.setAttribute("aria-expanded", String(open));
+  }
+
   /* ---------- the window itself ---------- */
 
   // What the monitor can show, in logical pixels, or null when nothing has
@@ -1639,6 +1718,7 @@
     palette.hidden = true;
     palIn.value = "";
     palIn.blur();
+    toggleGuide(false);
   }
 
   // No client-side validation of the command: the graph is the authority on
@@ -2329,6 +2409,12 @@
     });
     palette.addEventListener("click", function (ev) {
       if (ev.target === palette) closePalette();
+    });
+    document.getElementById("palHelp").addEventListener("click", function () {
+      toggleGuide();
+      // The guide is read, not typed into, so Enter and Escape should still
+      // reach the command line rather than the button that opened it.
+      palIn.focus();
     });
 
     document.addEventListener("keydown", onKey);
