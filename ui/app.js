@@ -59,6 +59,16 @@
     { k: "rmarea", s: "rmarea <direction>", e: "rmarea hard" },
   ];
 
+  // What each piece of chrome is for, shown on hover while hints are on.
+  // Native titles rather than a tooltip layer of our own: the browser already
+  // places them, keeps them on screen and reads them out.
+  var HINTS = {
+    dockToggle: "h.dock", vaultBtn: "h.vault", q: "h.search", rxBtn: "h.regex",
+    newBtn: "h.new", queueBtn: "h.queue", calBtn: "h.calendar", setBtn: "h.settings",
+    tally: "h.tally", zIn: "h.zoomIn", zOut: "h.zoomOut", zFit: "h.fit",
+    manageAreas: "h.areas", allBtn: "h.all", palHelp: "h.help",
+  };
+
   var DEFAULTS = {
     lang: "en",
     layout: "radial",
@@ -68,6 +78,7 @@
     winMode: "windowed",
     winW: 1280,
     winH: 800,
+    hints: true,
   };
 
   var backend = null;
@@ -85,6 +96,7 @@
     winMode: DEFAULTS.winMode,
     winW: DEFAULTS.winW,
     winH: DEFAULTS.winH,
+    hints: DEFAULTS.hints,
     visible: {},
     focus: null,
     selected: null,
@@ -1303,6 +1315,7 @@
     document.getElementById("qTitle").textContent = t("q.title");
     document.getElementById("qBlurb").textContent = t("q.blurb");
     document.getElementById("setTitle").textContent = t("set.title");
+    applyHints();
     qInput.placeholder = state.regex ? t("search.phRx") : t("search.ph");
     palIn.placeholder = t("cmd.ph");
     document.getElementById("palHint").textContent = t("cmd.hint");
@@ -1429,6 +1442,19 @@
     }
     host.hidden = !open;
     button.setAttribute("aria-expanded", String(open));
+  }
+
+  /* ---------- hints ---------- */
+
+  // Set rather than built into the markup, because the same control has a
+  // different sentence in each language and the setting turns them all off.
+  function applyHints() {
+    Object.keys(HINTS).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (state.hints) el.title = t(HINTS[id]);
+      else el.removeAttribute("title");
+    });
   }
 
   /* ---------- the window itself ---------- */
@@ -1635,6 +1661,18 @@
         state.motion = id;
         document.body.dataset.motion = id;
         savePrefs();
+        paintSettings();
+      }
+    ));
+
+    body.appendChild(choiceRow(
+      t("set.hints"), t("set.hintsNote"),
+      [{ id: "on", label: t("on") }, { id: "off", label: t("off") }],
+      state.hints ? "on" : "off",
+      function (id) {
+        state.hints = id === "on";
+        savePrefs();
+        applyHints();
         paintSettings();
       }
     ));
