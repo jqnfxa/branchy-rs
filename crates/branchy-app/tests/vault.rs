@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use branchy_app::store::{self, StoreError};
+use branchy_app::store::{self, Dirs, StoreError};
 use branchy_app::vault::{DOCUMENT, RECENT_LIMIT, Vault, Vaults};
 use branchy_core::{Graph, NewArea, NewNode};
 
@@ -433,4 +433,100 @@ fn serde_json_text(scratch: &Scratch, graph: &Graph) -> String {
     let text = fs::read_to_string(&staging).expect("reads");
     fs::remove_dir_all(scratch.dir().join("staging")).expect("cleans up");
     text
+}
+
+/* ---------- directories given rather than discovered ---------- */
+
+#[test]
+fn the_list_sits_in_the_configuration_directory() {
+    let dirs = Dirs::new("/config", "/data");
+    assert_eq!(dirs.config(), Path::new("/config"));
+    assert_eq!(dirs.data(), Path::new("/data"));
+    assert_eq!(dirs.vault_list(), Path::new("/config").join("vaults.json"));
+}
+
+#[test]
+fn a_list_is_read_from_the_directories_it_is_given() {
+    let scratch = Scratch::new("dirs-read");
+    let config = scratch.dir().join("config");
+    let data = scratch.dir().join("data");
+    fs::create_dir_all(&config).expect("mkdir");
+    fs::create_dir_all(&data).expect("mkdir");
+    let vault = Vault::create(scratch.dir(), "Work").expect("creates");
+
+    let dirs = Dirs::new(&config, &data);
+    let mut list = Vaults::for_dirs(&dirs).expect("loads");
+    list.opened(&vault);
+    list.save().expect("saves");
+
+    assert!(dirs.vault_list().is_file(), "written where it was told");
+    let again = Vaults::for_dirs(&dirs).expect("reloads");
+    assert_eq!(again.current(), Some(vault.dir()));
+}
+
+#[test]
+fn a_pre_vault_graph_is_adopted_from_the_data_directory_it_is_given() {
+    let scratch = Scratch::new("dirs-adopt");
+    let config = scratch.dir().join("config");
+    let data = scratch.dir().join("data");
+    store::save(&data.join(DOCUMENT), &graph_with(&["Old task"])).expect("saves");
+
+    let list = Vaults::for_dirs(&Dirs::new(&config, &data)).expect("loads");
+    assert_eq!(
+        list.current(),
+        Some(Vault::open(&data).expect("opens").dir())
+    );
+}
+
+#[test]
+fn two_sets_of_directories_keep_separate_lists() {
+    let scratch = Scratch::new("dirs-apart");
+    let one = Dirs::new(scratch.dir().join("one"), scratch.dir().join("one-data"));
+    let two = Dirs::new(scratch.dir().join("two"), scratch.dir().join("two-data"));
+    let vault = Vault::create(scratch.dir(), "Only in one").expect("creates");
+
+    let mut first = Vaults::for_dirs(&one).expect("loads");
+    first.opened(&vault);
+    first.save().expect("saves");
+
+    // the point of injecting them: nothing is shared through the environment
+    assert!(Vaults::for_dirs(&two).expect("loads").recent().is_empty());
+}
+
+#[test]
+fn the_document_is_found_through_the_directories_it_is_given() {
+    let scratch = Scratch::new("dirs-doc");
+    let config = scratch.dir().join("config");
+    let data = scratch.dir().join("data");
+    let vault = Vault::create(scratch.dir(), "Work").expect("creates");
+
+    let dirs = Dirs::new(&config, &data);
+    let mut list = Vaults::for_dirs(&dirs).expect("loads");
+    list.opened(&vault);
+    list.save().expect("saves");
+
+    assert_eq!(
+        store::default_path_in(&dirs).expect("resolves"),
+        vault.document()
+    );
+}
+
+#[test]
+fn a_gone_vault_is_reported_rather_than_recreated_through_given_directories() {
+    let scratch = Scratch::new("dirs-gone");
+    let config = scratch.dir().join("config");
+    let data = scratch.dir().join("data");
+    let vault = Vault::create(scratch.dir(), "Work").expect("creates");
+
+    let dirs = Dirs::new(&config, &data);
+    let mut list = Vaults::for_dirs(&dirs).expect("loads");
+    list.opened(&vault);
+    list.save().expect("saves");
+    fs::remove_dir_all(vault.dir()).expect("removes");
+
+    assert!(matches!(
+        store::default_path_in(&dirs),
+        Err(StoreError::VaultMissing(_))
+    ));
+    assert!(!vault.dir().exists(), "resolving must not recreate it");
 }

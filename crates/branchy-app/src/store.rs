@@ -265,7 +265,23 @@ pub fn default_path() -> Result<PathBuf, StoreError> {
     if let Some(given) = std::env::var_os("BRANCHY_FILE") {
         return Ok(PathBuf::from(given));
     }
-    let vaults = Vaults::user()?;
+    document_in(&Vaults::user()?)
+}
+
+/// Where the document lives, for directories given rather than discovered.
+///
+/// Neither `BRANCHY_FILE` nor `BRANCHY_VAULTS` is read here. A front end that
+/// was handed its directories was handed its overrides too, and keeping the
+/// environment out of this makes it a pure function of `dirs`.
+///
+/// # Errors
+///
+/// As [`default_path`], minus the ones about finding a home directory.
+pub fn default_path_in(dirs: &Dirs) -> Result<PathBuf, StoreError> {
+    document_in(&Vaults::for_dirs(dirs)?)
+}
+
+fn document_in(vaults: &Vaults) -> Result<PathBuf, StoreError> {
     let dir = vaults.current().ok_or(StoreError::NoVault)?;
     // checked here, because a save would quietly recreate a deleted folder
     if !dir.is_dir() {
@@ -274,9 +290,64 @@ pub fn default_path() -> Result<PathBuf, StoreError> {
     Ok(dir.join(DOCUMENT))
 }
 
-/// The per-user directories, named once so every caller agrees.
-pub(crate) fn project_dirs() -> Result<directories::ProjectDirs, StoreError> {
-    directories::ProjectDirs::from("dev", "jqnfxa", "branchy").ok_or(StoreError::NoHome)
+/// Where this device keeps Branchy's own files: the recent-vault list, and
+/// the data directory a version from before vaults may have left a graph in.
+///
+/// The crate no longer goes looking for these by itself, because the right
+/// answer depends on which front end is asking. The terminal derives them
+/// from the platform's conventions, which is what [`Dirs::user`] does. A
+/// shell that is told its directories by the platform builds one with
+/// [`Dirs::new`] instead and passes it in, which is the only thing that can
+/// work where there is no home directory to derive them from.
+///
+/// Discovery and the environment overrides stay at the edge, in
+/// [`Dirs::user`], [`Vaults::user`] and [`default_path`]. Everything that
+/// takes a `Dirs` is a pure function of it, which is what lets it be tested
+/// without touching the environment that every other test in the process
+/// shares.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Dirs {
+    config: PathBuf,
+    data: PathBuf,
+}
+
+impl Dirs {
+    /// Directories named outright, by a caller whose platform tells it.
+    pub fn new(config: impl Into<PathBuf>, data: impl Into<PathBuf>) -> Self {
+        Self {
+            config: config.into(),
+            data: data.into(),
+        }
+    }
+
+    /// The conventional per-user directories for this platform.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError::NoHome`] when the platform offers nowhere to put them.
+    pub fn user() -> Result<Self, StoreError> {
+        let found =
+            directories::ProjectDirs::from("dev", "jqnfxa", "branchy").ok_or(StoreError::NoHome)?;
+        Ok(Self::new(found.config_dir(), found.data_dir()))
+    }
+
+    /// Where settings live, which so far is the recent-vault list alone.
+    #[must_use]
+    pub fn config(&self) -> &Path {
+        &self.config
+    }
+
+    /// Where a version from before vaults would have left its graph.
+    #[must_use]
+    pub fn data(&self) -> &Path {
+        &self.data
+    }
+
+    /// The file holding the recent-vault list.
+    #[must_use]
+    pub fn vault_list(&self) -> PathBuf {
+        self.config.join(crate::vault::LIST_FILE)
+    }
 }
 
 /// Reads the graph, or returns an empty one if the file is not there yet.

@@ -21,6 +21,6 @@ pub mod today;
 pub mod vault;
 
 pub use snapshot::{Outcome, Snapshot};
-pub use store::StoreError;
+pub use store::{Dirs, StoreError};
 pub use today::{Urgency, today};
 pub use vault::{Vault, Vaults};

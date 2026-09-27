@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use branchy_core::Graph;
 use serde::{Deserialize, Serialize};
 
-use crate::store::{self, StoreError};
+use crate::store::{self, Dirs, StoreError};
 
 /// The document inside every vault.
 pub const DOCUMENT: &str = "graph.json";
@@ -39,7 +39,7 @@ pub const RECENT_LIMIT: usize = 5;
 /// cope with.
 const LIST_VERSION: u32 = 1;
 
-const LIST_FILE: &str = "vaults.json";
+pub(crate) const LIST_FILE: &str = "vaults.json";
 
 /// A folder holding one graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,8 +176,21 @@ impl Vaults {
         if let Some(given) = std::env::var_os("BRANCHY_VAULTS") {
             return Self::load(Path::new(&given));
         }
-        let dirs = store::project_dirs()?;
-        Self::load_or_adopt(&dirs.config_dir().join(LIST_FILE), dirs.data_dir())
+        Self::for_dirs(&Dirs::user()?)
+    }
+
+    /// The list as a given pair of directories describes it.
+    ///
+    /// Unlike [`Vaults::user`] this reads no environment variable. It is a
+    /// pure function of `dirs`, which is what a front end told its
+    /// directories by the platform needs, and what lets a test exercise the
+    /// list without touching the environment the whole process shares.
+    ///
+    /// # Errors
+    ///
+    /// As [`Vaults::load`].
+    pub fn for_dirs(dirs: &Dirs) -> Result<Self, StoreError> {
+        Self::load_or_adopt(&dirs.vault_list(), dirs.data())
     }
 
     /// Reads a list, or starts an empty one if the file is not there yet.
