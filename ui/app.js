@@ -140,6 +140,26 @@
     return area ? area.color : "var(--text-dim)";
   }
 
+  // Past this many tasks the view is drawn plainly: no pulsing haloes, no
+  // opacity transitions, and hidden things leave the render tree rather than
+  // sitting there at opacity 0. Below it nothing changes at all.
+  var DENSE = 150;
+
+  // Reading stage.clientWidth or getBoundingClientRect forces a synchronous
+  // style recalc and layout of the whole canvas. Done in the click and wheel
+  // handlers, just after classes changed on hundreds of elements, that one
+  // read cost more than everything else in the handler put together. The
+  // observer's callback runs when layout is already settled, so it is free.
+  var stageBox = { w: 0, h: 0, left: 0, top: 0 };
+
+  function measureStage() {
+    var r = stage.getBoundingClientRect();
+    stageBox.w = r.width;
+    stageBox.h = r.height;
+    stageBox.left = r.left;
+    stageBox.top = r.top;
+  }
+
   function shownNodes() {
     return snap.nodes.filter(function (node) {
       return state.focus ? node.area === state.focus : state.visible[node.area];
@@ -323,7 +343,10 @@
     var areas = snap.areas.filter(function (area) {
       return state.focus ? area.id === state.focus : state.visible[area.id];
     });
-    LAY = B.layout(state.layout, areas, shownNodes());
+    var shown = shownNodes();
+    // see the .dense rules in the stylesheet
+    document.body.classList.toggle("dense", shown.length > DENSE);
+    LAY = B.layout(state.layout, areas, shown);
 
     gDecor.textContent = "";
     gLinks.textContent = "";
@@ -387,7 +410,7 @@
       });
     });
 
-    shownNodes().forEach(function (node) {
+    shown.forEach(function (node) {
       var at = positions[node.id];
       if (!at) return;
       var group = el("g", {
@@ -400,7 +423,11 @@
       });
       group.style.setProperty("--c", colorOf(node.area));
       group.dataset.id = node.id;
-      group.appendChild(el("circle", { class: "halo", cx: 0, cy: 0, r: 24 }));
+      // only an available task ever shows one, and an invisible circle is
+      // still an element the engine lays out and composites
+      if (node.status === "available") {
+        group.appendChild(el("circle", { class: "halo", cx: 0, cy: 0, r: 24 }));
+      }
       group.appendChild(el("circle", { class: "disc", cx: 0, cy: 0, r: 18 }));
       group.appendChild(glyphFor(node.status));
 
@@ -466,10 +493,14 @@
     if (!LAY) return;
     var k = state.view.k;
     labelsAt = k;
+    // Below this every label is hidden outright, so which of them would have
+    // overlapped is not a question anybody can see the answer to. On a big
+    // graph this is the zoom the whole thing is read at.
+    if (k < 0.36) return;
     var onlyAvailable = k < 0.52; // matches .hide-labels in the stylesheet
     var entries = [];
     Array.prototype.forEach.call(gLabels.children, function (label) {
-      var node = byId[label.dataset.id];
+      var node = label._node || (label._node = byId[label.dataset.id]);
       var at = node && LAY.positions[node.id];
       if (!at) return;
       // a faded or zoom-hidden label takes no room
@@ -558,8 +589,14 @@
     gLabels.classList.toggle("hide-labels", view.k < 0.52);
     // too far out for any label to be read, and a big graph is a solid
     // block of text there
-    gLabels.classList.toggle("hide-all-labels", view.k < 0.36);
-    if (labelsAt === null || Math.abs(view.k - labelsAt) > view.k * 0.04) queueLabels();
+    var far = view.k < 0.36;
+    var wasFar = gLabels.classList.contains("hide-all-labels");
+    gLabels.classList.toggle("hide-all-labels", far);
+    canvas.classList.toggle("far", far);
+    // placeLabels does nothing while far out, so coming back in has to
+    // re-place even if the zoom barely moved
+    if (labelsAt === null || far !== wasFar ||
+        Math.abs(view.k - labelsAt) > view.k * 0.04) queueLabels();
   }
 
   function tweenTo(target, ms) {
@@ -589,7 +626,7 @@
     var ids = Object.keys(LAY.positions);
     // nothing drawn but the hub, as in a vault just created: centre on it,
     // rather than leaving the camera wherever the last vault had it
-    if (!ids.length) return { k: 1, x: stage.clientWidth / 2, y: stage.clientHeight / 2 };
+    if (!ids.length) return { k: 1, x: stageBox.w / 2, y: stageBox.h / 2 };
     var pad = 96;
     var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     ids.forEach(function (id) {
@@ -602,7 +639,7 @@
       y0 = Math.min(y0, -60); y1 = Math.max(y1, 60);
     }
     x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
-    var w = stage.clientWidth, h = stage.clientHeight;
+    var w = stageBox.w, h = stageBox.h;
     // the floor is low so that fit can show a graph of several hundred tasks
     // whole; labels give way long before it, see applyTransform
     var k = Math.max(0.06, Math.min(1.6, Math.min(w / (x1 - x0), h / (y1 - y0))));
@@ -619,7 +656,7 @@
     var at = LAY.positions[id];
     var k = Math.min(Math.max(state.view.k, 1.15), 1.6);
     tweenTo(
-      { k: k, x: stage.clientWidth / 2 - at.x * k, y: stage.clientHeight / 2 - at.y * k },
+      { k: k, x: stageBox.w / 2 - at.x * k, y: stageBox.h / 2 - at.y * k },
       560
     );
   }
@@ -660,8 +697,7 @@
       "wheel",
       function (ev) {
         ev.preventDefault();
-        var box = stage.getBoundingClientRect();
-        zoomAt(ev.clientX - box.left, ev.clientY - box.top, Math.exp(-ev.deltaY * 0.0016));
+        zoomAt(ev.clientX - stageBox.left, ev.clientY - stageBox.top, Math.exp(-ev.deltaY * 0.0016));
       },
       { passive: false }
     );
@@ -678,8 +714,7 @@
       if (ev.touches.length !== 2 || !pinch) return;
       ev.preventDefault();
       var now = spread(ev.touches);
-      var box = stage.getBoundingClientRect();
-      zoomAt(now.x - box.left, now.y - box.top, now.d / pinch.d);
+      zoomAt(now.x - stageBox.left, now.y - stageBox.top, now.d / pinch.d);
       pinch = now;
     }, { passive: false });
     stage.addEventListener("touchend", function () { pinch = null; });
@@ -705,10 +740,10 @@
     }
 
     document.getElementById("zIn").onclick = function () {
-      zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, 1.3);
+      zoomAt(stageBox.w / 2, stageBox.h / 2, 1.3);
     };
     document.getElementById("zOut").onclick = function () {
-      zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, 0.77);
+      zoomAt(stageBox.w / 2, stageBox.h / 2, 0.77);
     };
     document.getElementById("zFit").onclick = function () { fit(); };
   }
@@ -1376,6 +1411,7 @@
       function (id) {
         state.dockSide = id;
         rowEl.classList.toggle("dock-right", id === "right");
+        requestAnimationFrame(measureStage);
         savePrefs();
         paintSettings();
         requestAnimationFrame(function () { fit(0); });
@@ -2077,6 +2113,9 @@
     [gDecor, gLinks, gFx, gNodes, gLabels].forEach(function (g) { world.appendChild(g); });
     canvas.appendChild(world);
 
+    measureStage();
+    if (window.ResizeObserver) new ResizeObserver(measureStage).observe(stage);
+    window.addEventListener("resize", measureStage);
     wirePanZoom();
 
     qInput.addEventListener("input", function () {

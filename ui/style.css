@@ -268,6 +268,9 @@ kbd{
   animation:pulse 2.6s ease-in-out infinite;
 }
 @keyframes pulse{0%,100%{opacity:.45;transform:scale(1)}50%{opacity:0;transform:scale(1.42)}}
+/* Hundreds of haloes scaling forever repaint the whole canvas even when
+   nobody is touching it, and WebKitGTK often composites in software. */
+body.dense .node.available .halo{animation:none;opacity:.45}
 
 .node.done .disc{fill:color-mix(in srgb,var(--c) 26%,var(--bg-card));stroke:var(--c);stroke-width:1.8}
 .node.done .glyph{stroke:var(--c);fill:none;stroke-width:2}
@@ -277,15 +280,25 @@ kbd{
 .label.available,.label.done,.label.sel,.label.hover{fill:var(--text)}
 
 .node,.link{transition:opacity .25s ease}
+/* Selecting a task fades everything off the path. With hundreds of tasks
+   that is a thousand opacity transitions starting in the same frame, so
+   past DENSE the change is instant instead of eased. */
+body.dense .node,body.dense .link,body.dense .labels .label{transition:none}
 .faded{opacity:.12!important}
 .labels .label.faded{opacity:0!important}
+body.dense .labels .label.faded{display:none!important}
 /* Zoomed out far enough that every label would collide, keep the ones that
    matter: the tasks you could actually start now. Done and locked tasks are
    context at that scale, and read from shape and colour alone. */
 .hide-labels .label:not(.available):not(.sel){opacity:0}
-.hide-all-labels .label{opacity:0}
+body.dense .hide-labels .label:not(.available):not(.sel){display:none}
+.hide-all-labels .label{display:none}
+/* Zoomed out this far the status glyph is a couple of pixels of stroked
+   path, and there are hundreds of them. Shape and colour still read. */
+body.dense #canvas.far .node .glyph{display:none}
 /* left out because it would overlap a more important label; see placeLabels */
 .labels .label.culled{opacity:0}
+body.dense .labels .label.culled{display:none}
 
 .node.just-freed .disc{animation:freed 1.5s ease-out 1}
 @keyframes freed{
