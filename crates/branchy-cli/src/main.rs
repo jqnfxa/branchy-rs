@@ -6,10 +6,10 @@
 
 mod render;
 
-use branchy_app::{StoreError, Vault, Vaults, snapshot, store};
+use branchy_app::{Made, StoreError, Vault, Vaults, snapshot, store};
 
 use std::fmt::Write as _;
-use std::io::Write as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -74,7 +74,10 @@ enum Cmd {
     RecolorArea(Rest),
     /// Remove an empty direction
     Rmarea(Rest),
-    /// Run a raw command line, exactly as the in-app command line would
+    /// Run a raw command line, exactly as the in-app command line would.
+    /// `run -` reads many lines from stdin and applies them as one change:
+    /// all or nothing, one save, one undo. A line may start with `$x =` to
+    /// name what it creates, and later lines refer to it as `$x`.
     Run(Rest),
 
     /// Everything available now, highest priority first
@@ -219,6 +222,16 @@ fn run(cli: &Cli) -> Result<String, String> {
     }
 
     // everything else is a mutation, expressed in the shared grammar
+    if let Cmd::Run(rest) = &cli.command {
+        if rest.args == ["-"] {
+            let mut text = String::new();
+            std::io::stdin()
+                .read_to_string(&mut text)
+                .map_err(|e| format!("could not read the batch from stdin: {e}"))?;
+            return batch(&path, graph, &text);
+        }
+    }
+
     let line = match &cli.command {
         Cmd::Add(rest) => line("add", &rest.args),
         Cmd::Done(rest) => line("done", &rest.args),
@@ -249,7 +262,7 @@ fn run(cli: &Cli) -> Result<String, String> {
         | Cmd::Vault { .. } => unreachable!("handled above"),
     };
 
-    let edit = branchy_app::apply_lines(graph, &[line]).map_err(|e| e.to_string())?;
+    let edit = branchy_app::apply_lines(graph, &[line]).map_err(|e| e.message)?;
     let graph = edit.graph;
     store::save(&path, &graph).map_err(|e| e.to_string())?;
 
@@ -266,6 +279,37 @@ fn run(cli: &Cli) -> Result<String, String> {
         }
     }
     let _ = writeln!(out, "{}", tally(&graph));
+    Ok(out)
+}
+
+/// Applies a whole batch as one change.
+///
+/// A refusal names its line, because in a batch of two hundred the message
+/// alone does not say where to look. Nothing is saved unless every line was
+/// accepted.
+fn batch(path: &Path, graph: Graph, text: &str) -> Result<String, String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let edit = branchy_app::apply_lines(graph, &lines)
+        .map_err(|e| format!("line {}: {}", e.line, e.message))?;
+    store::save(path, &edit.graph).map_err(|e| e.to_string())?;
+
+    let mut out = format!(
+        "Applied {} command{}.\n",
+        edit.applied,
+        if edit.applied == 1 { "" } else { "s" }
+    );
+    for (label, made) in &edit.made {
+        let named = match made {
+            Made::Node(id) => edit.graph.node(*id).map(|node| node.name.as_str()),
+            Made::Area(id) => edit.graph.area(*id).map(|area| area.name.as_str()),
+        };
+        let _ = write!(out, "  {made}  {}", named.unwrap_or("?"));
+        if let Some(label) = label {
+            let _ = write!(out, "  ${label}");
+        }
+        out.push('\n');
+    }
+    let _ = writeln!(out, "{}", tally(&edit.graph));
     Ok(out)
 }
 

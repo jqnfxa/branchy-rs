@@ -42,6 +42,8 @@ pub struct Edit {
     pub made: Vec<(Option<String>, Made)>,
     /// Commands that take the whole run back, in the order to apply them.
     pub undo: Vec<Command>,
+    /// How many lines held a command, as opposed to blanks and comments.
+    pub applied: usize,
 }
 
 /// A line the graph or the parser would not accept.
@@ -74,13 +76,15 @@ impl std::error::Error for Refused {}
 ///
 /// # Errors
 ///
-/// [`Refused`] for the first line that did not parse or was not accepted.
+/// [`Refused`] for the first line that did not parse or was not accepted, or
+/// when no line held a command at all.
 pub fn apply_lines<S: AsRef<str>>(mut graph: Graph, lines: &[S]) -> Result<Edit, Refused> {
     let mut labels = Labels::new();
     let mut node = None;
     let mut area = None;
     let mut made = Vec::new();
     let mut undo: Vec<Command> = Vec::new();
+    let mut applied_lines = 0;
 
     for (index, line) in lines.iter().enumerate() {
         let line = line.as_ref().trim();
@@ -114,6 +118,7 @@ pub fn apply_lines<S: AsRef<str>>(mut graph: Graph, lines: &[S]) -> Result<Edit,
                 made.push((label, thing));
             }
         }
+        applied_lines += 1;
         node = applied.node.or(node);
         area = applied.area.or(area);
         // later undos must run first
@@ -122,12 +127,21 @@ pub fn apply_lines<S: AsRef<str>>(mut graph: Graph, lines: &[S]) -> Result<Edit,
         undo = next;
     }
 
+    if applied_lines == 0 {
+        // a blank command line, or a batch of nothing but comments, is far
+        // more likely a mistake than a request to do nothing
+        return Err(Refused {
+            line: 1,
+            message: ParseError::Empty.to_string(),
+        });
+    }
     Ok(Edit {
         graph,
         node,
         area,
         made,
         undo,
+        applied: applied_lines,
     })
 }
 

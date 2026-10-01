@@ -807,3 +807,92 @@ fn a_file_and_a_vault_cannot_both_be_named() {
             .contains("cannot be used with")
     );
 }
+
+// ── batches ─────────────────────────────────────────────────────────────
+
+/// Runs the binary with `input` on stdin, returning stdout and stderr and
+/// whether it succeeded.
+fn run_with_input(scratch: &Scratch, args: &[&str], input: &str) -> (bool, String, String) {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new(binary())
+        .arg("--file")
+        .arg(scratch.path())
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("binary runs");
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(input.as_bytes())
+        .expect("input written");
+    let output = child.wait_with_output().expect("binary exits");
+    (
+        output.status.success(),
+        String::from_utf8(output.stdout).expect("utf-8 output"),
+        String::from_utf8(output.stderr).expect("utf-8 output"),
+    )
+}
+
+#[test]
+fn a_batch_wires_up_tasks_that_had_no_id_when_it_was_written() {
+    let scratch = Scratch::new("batch");
+    let (ok, out, err) = run_with_input(
+        &scratch,
+        &["run", "-"],
+        "# a small maths chain\n\
+         $m = area Maths\n\
+         $calc = add Calculus in $m\n\
+         \n\
+         $alg = add Algebra in $m pri 7\n\
+         add \"Linear algebra\" in $m after $calc, $alg\n",
+    );
+    assert!(ok, "{err}");
+    assert!(out.contains("Applied 4 commands"), "{out}");
+    assert!(out.contains("n0  Calculus  $calc"), "{out}");
+    let why = run(&scratch, &["why", "Linear algebra"]);
+    assert!(why.contains("Calculus") && why.contains("Algebra"), "{why}");
+}
+
+#[test]
+fn a_batch_is_one_change_to_undo() {
+    let scratch = Scratch::new("batch-undo");
+    run(&scratch, &["area", "Work"]);
+    let (ok, _, err) = run_with_input(&scratch, &["run", "-"], "add One\nadd Two\nadd Three\n");
+    assert!(ok, "{err}");
+    run(&scratch, &["undo"]);
+    let list = run(&scratch, &["list"]);
+    assert!(!list.contains("One") && !list.contains("Three"), "{list}");
+}
+
+#[test]
+fn a_refused_line_leaves_the_whole_batch_unapplied() {
+    let scratch = Scratch::new("batch-refused");
+    run(&scratch, &["area", "Work"]);
+    let before = std::fs::read_to_string(scratch.path()).expect("saved");
+    let (ok, _, err) = run_with_input(
+        &scratch,
+        &["run", "-"],
+        "add One\nadd Two\nlink One after Nowhere\nadd Four\n",
+    );
+    assert!(!ok);
+    assert!(err.contains("line 3:"), "{err}");
+    assert_eq!(
+        std::fs::read_to_string(scratch.path()).expect("still there"),
+        before
+    );
+}
+
+#[test]
+fn a_batch_of_comments_is_refused_as_empty() {
+    let scratch = Scratch::new("batch-empty");
+    run(&scratch, &["area", "Work"]);
+    let (ok, _, err) = run_with_input(&scratch, &["run", "-"], "# nothing yet\n\n");
+    assert!(!ok);
+    assert!(err.contains("nothing to do"), "{err}");
+}
