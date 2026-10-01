@@ -71,4 +71,4 @@ pub use error::Error;
 pub use graph::Graph;
 pub use id::{AreaId, NodeId};
 pub use node::{Area, NewArea, NewNode, Node, Status};
-pub use parse::{ParseError, parse, quote, resolve_area, resolve_node};
+pub use parse::{Labels, ParseError, parse, parse_labelled, quote, resolve_area, resolve_node};

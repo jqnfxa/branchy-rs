@@ -1,6 +1,8 @@
 //! The command layer: applying, undoing, and parsing text into commands.
 
-use branchy_core::{AreaId, Command, Error, Graph, NewArea, NewNode, NodeId, ParseError, Status};
+use branchy_core::{
+    AreaId, Command, Error, Graph, Labels, NewArea, NewNode, NodeId, ParseError, Status,
+};
 
 /// A graph with one area named "Hard skills" and the given nodes.
 fn fixture(names: &[&str]) -> (Graph, AreaId, Vec<NodeId>) {
@@ -557,4 +559,77 @@ fn add_can_carry_a_note_in_one_command() {
     assert_eq!(node.name, "Limit order book");
     assert_eq!(node.note, "Price-time priority, measured.");
     assert_eq!(node.priority, 10);
+}
+
+// ── a batch names what it creates ────────────────────────────────────────
+
+/// Runs lines as a batch would, recording each label against what its line
+/// created.
+fn batch(graph: &mut Graph, lines: &[&str]) -> Labels {
+    let mut labels = Labels::new();
+    for line in lines {
+        let (label, command) =
+            branchy_core::parse_labelled(graph, line, &labels).expect("line should parse");
+        let applied = graph.apply(command).expect("command should apply");
+        if let Some(label) = label {
+            match (applied.node, applied.area) {
+                (Some(node), _) => labels.name_node(label, node),
+                (None, Some(area)) => labels.name_area(label, area),
+                (None, None) => {}
+            }
+        }
+    }
+    labels
+}
+
+#[test]
+fn a_later_line_refers_to_a_task_an_earlier_line_created() {
+    let (mut graph, _, _) = fixture(&[]);
+    let labels = batch(
+        &mut graph,
+        &[
+            "$calc = add Calculus",
+            "$alg = add Algebra",
+            "add \"Linear algebra\" after $calc, $alg",
+        ],
+    );
+    let linear = branchy_core::resolve_node(&graph, "Linear algebra").expect("exists");
+    let needs: Vec<NodeId> = graph
+        .node(linear)
+        .expect("exists")
+        .prereqs
+        .iter()
+        .copied()
+        .collect();
+    let mut expected = vec![
+        labels.node("calc").expect("named"),
+        labels.node("alg").expect("named"),
+    ];
+    expected.sort();
+    assert_eq!(needs, expected);
+}
+
+#[test]
+fn a_label_can_name_a_direction() {
+    let mut graph = Graph::new();
+    let labels = batch(&mut graph, &["$h=area Health", "add Sleep in $h"]);
+    let sleep = branchy_core::resolve_node(&graph, "Sleep").expect("exists");
+    assert_eq!(
+        graph.node(sleep).expect("exists").area,
+        labels.area("h").expect("named")
+    );
+}
+
+#[test]
+fn an_unknown_label_is_refused_rather_than_matched_by_name() {
+    let (graph, _, _) = fixture(&["$x"]);
+    let refused = branchy_core::parse_labelled(&graph, "done $x", &Labels::new()).unwrap_err();
+    assert_eq!(refused, ParseError::NoSuchTask("$x".to_string()));
+}
+
+#[test]
+fn a_single_line_does_not_accept_a_label() {
+    let (graph, _, _) = fixture(&[]);
+    let refused = branchy_core::parse(&graph, "$x = add Calculus").unwrap_err();
+    assert_eq!(refused, ParseError::UnknownVerb("$x".to_string()));
 }

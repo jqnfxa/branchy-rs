@@ -18,8 +18,16 @@
 //! `after` and `needs` are the same word for "blocked by"; `before` and
 //! `blocks` describe the same edge from the other end. Tasks and areas are
 //! named by id or by any unambiguous part of their name.
+//!
+//! A batch of lines (see [`parse_labelled`]) may also name what a line
+//! creates, and refer to it from later lines, before it has an id:
+//!
+//! ```text
+//! $calc = add Calculus in Maths
+//! add "Linear algebra" after $calc
+//! ```
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::command::Command;
 use crate::date::Date;
@@ -151,6 +159,76 @@ pub fn quote(value: &str) -> String {
     format!("\"{escaped}\"")
 }
 
+/// Names a batch gave to what its earlier lines created.
+///
+/// A line in a batch cannot refer to a task an earlier line created by id,
+/// because nobody writing the batch knows that id yet. So a line may begin
+/// with `$name =`, and later lines say `$name` wherever a task or direction
+/// goes. The caller records what each labelled line created, since only it
+/// sees the command applied.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Labels {
+    nodes: BTreeMap<String, NodeId>,
+    areas: BTreeMap<String, AreaId>,
+}
+
+impl Labels {
+    /// No names yet.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Records that `label` (without its `$`) means this task.
+    pub fn name_node(&mut self, label: impl Into<String>, id: NodeId) {
+        self.nodes.insert(label.into(), id);
+    }
+
+    /// Records that `label` (without its `$`) means this direction.
+    pub fn name_area(&mut self, label: impl Into<String>, id: AreaId) {
+        self.areas.insert(label.into(), id);
+    }
+
+    /// The task `label` names, if any.
+    #[must_use]
+    pub fn node(&self, label: &str) -> Option<NodeId> {
+        self.nodes.get(label).copied()
+    }
+
+    /// The direction `label` names, if any.
+    #[must_use]
+    pub fn area(&self, label: &str) -> Option<AreaId> {
+        self.areas.get(label).copied()
+    }
+}
+
+/// What a reference is resolved against: the graph, and in a batch the
+/// labels its earlier lines gave out.
+struct Scope<'a> {
+    graph: &'a Graph,
+    labels: Option<&'a Labels>,
+}
+
+impl Scope<'_> {
+    fn node(&self, query: &str) -> Result<NodeId, ParseError> {
+        if let (Some(labels), Some(label)) = (self.labels, query.strip_prefix('$')) {
+            return labels
+                .node(label)
+                .ok_or_else(|| ParseError::NoSuchTask(query.to_string()));
+        }
+        resolve_node(self.graph, query)
+    }
+
+    fn area(&self, query: &str) -> Result<AreaId, ParseError> {
+        if let (Some(labels), Some(label)) = (self.labels, query.strip_prefix('$')) {
+            return labels
+                .area(label)
+                .ok_or_else(|| ParseError::NoSuchArea(query.to_string()));
+        }
+        resolve_area(self.graph, query)
+    }
+}
+
 /// Finds the one node a reference names.
 ///
 /// An exact id (`n12`) or an exact name wins outright; otherwise it is a
@@ -230,43 +308,88 @@ pub fn resolve_area(graph: &Graph, query: &str) -> Result<AreaId, ParseError> {
 /// A [`ParseError`] describing what was wrong with the line. Nothing is
 /// changed: applying the command is a separate step.
 pub fn parse(graph: &Graph, input: &str) -> Result<Command, ParseError> {
-    let tokens = tokenize(input.trim());
+    let scope = Scope {
+        graph,
+        labels: None,
+    };
+    parse_tokens(&scope, &tokenize(input.trim()))
+}
+
+/// Turns one line of a batch into a command, along with the label the line
+/// gives to whatever it creates.
+///
+/// Unlike [`parse`], a line may begin with `$name =`, and `$name` anywhere a
+/// task or direction goes is looked up in `labels` rather than in the graph.
+///
+/// # Errors
+///
+/// As [`parse`]. A `$name` nothing was given is [`ParseError::NoSuchTask`] or
+/// [`ParseError::NoSuchArea`].
+pub fn parse_labelled(
+    graph: &Graph,
+    input: &str,
+    labels: &Labels,
+) -> Result<(Option<String>, Command), ParseError> {
+    let scope = Scope {
+        graph,
+        labels: Some(labels),
+    };
+    let mut tokens = tokenize(input.trim());
+    // `$x = add`, `$x= add` and `$x=add` all name the line `x`
+    let label = match tokens.first() {
+        Some(first) if first.len() > 1 && first.starts_with('$') => {
+            let first = tokens.remove(0);
+            let (name, after) = first[1..].split_once('=').unwrap_or((&first[1..], ""));
+            if !after.is_empty() {
+                tokens.insert(0, after.to_string());
+            } else if tokens.first().is_some_and(|next| next == "=") {
+                tokens.remove(0);
+            }
+            Some(name.to_string())
+        }
+        _ => None,
+    };
+    let rest = tokens.as_slice();
+    Ok((label, parse_tokens(&scope, rest)?))
+}
+
+fn parse_tokens(scope: &Scope<'_>, tokens: &[String]) -> Result<Command, ParseError> {
     let Some((verb, rest)) = tokens.split_first() else {
         return Err(ParseError::Empty);
     };
 
     match verb.to_ascii_lowercase().as_str() {
-        "add" => parse_add(graph, rest),
+        "add" => parse_add(scope, rest),
         "done" => Ok(Command::SetDone {
-            node: resolve_node(graph, &join(rest))?,
+            node: scope.node(&join(rest))?,
             done: true,
         }),
         "undone" => Ok(Command::SetDone {
-            node: resolve_node(graph, &join(rest))?,
+            node: scope.node(&join(rest))?,
             done: false,
         }),
-        "rm" | "del" | "delete" => Ok(Command::RemoveNode(resolve_node(graph, &join(rest))?)),
-        "pri" | "priority" => parse_priority(graph, rest),
-        "due" => parse_due(graph, rest),
+        "rm" | "del" | "delete" => Ok(Command::RemoveNode(scope.node(&join(rest))?)),
+        "pri" | "priority" => parse_priority(scope, rest),
+        "due" => parse_due(scope, rest),
         "rename" => parse_two_part(rest).map_or(Err(ParseError::MissingTask), |(who, what)| {
             Ok(Command::SetName {
-                node: resolve_node(graph, &who)?,
+                node: scope.node(&who)?,
                 name: what,
             })
         }),
         "note" => parse_two_part(rest).map_or(Err(ParseError::MissingTask), |(who, what)| {
             Ok(Command::SetNote {
-                node: resolve_node(graph, &who)?,
+                node: scope.node(&who)?,
                 note: what,
             })
         }),
-        "move" => parse_move(graph, rest),
-        "link" | "unlink" => parse_link(graph, verb == "link", rest),
+        "move" => parse_move(scope, rest),
+        "link" | "unlink" => parse_link(scope, verb == "link", rest),
         "area" => parse_area(rest),
         "rename-area" => {
             parse_two_part(rest).map_or(Err(ParseError::MissingTask), |(who, what)| {
                 Ok(Command::SetAreaName {
-                    area: resolve_area(graph, &who)?,
+                    area: scope.area(&who)?,
                     name: what,
                 })
             })
@@ -274,12 +397,12 @@ pub fn parse(graph: &Graph, input: &str) -> Result<Command, ParseError> {
         "recolor-area" | "recolour-area" => {
             parse_two_part(rest).map_or(Err(ParseError::MissingTask), |(who, what)| {
                 Ok(Command::SetAreaColor {
-                    area: resolve_area(graph, &who)?,
+                    area: scope.area(&who)?,
                     color: what,
                 })
             })
         }
-        "rmarea" => Ok(Command::RemoveArea(resolve_area(graph, &join(rest))?)),
+        "rmarea" => Ok(Command::RemoveArea(scope.area(&join(rest))?)),
         other => Err(ParseError::UnknownVerb(other.to_string())),
     }
 }
@@ -294,7 +417,7 @@ fn parse_two_part(tokens: &[String]) -> Option<(String, String)> {
     Some((first.clone(), join(rest)))
 }
 
-fn parse_priority(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
+fn parse_priority(scope: &Scope<'_>, tokens: &[String]) -> Result<Command, ParseError> {
     let Some((last, head)) = tokens.split_last() else {
         return Err(ParseError::MissingTask);
     };
@@ -305,13 +428,13 @@ fn parse_priority(graph: &Graph, tokens: &[String]) -> Result<Command, ParseErro
         .parse::<u8>()
         .map_err(|_| ParseError::BadPriority(last.clone()))?;
     Ok(Command::SetPriority {
-        node: resolve_node(graph, &join(head))?,
+        node: scope.node(&join(head))?,
         priority,
     })
 }
 
 /// `due <task> 2026-12-31`, or `due <task> none` to take the date off.
-fn parse_due(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
+fn parse_due(scope: &Scope<'_>, tokens: &[String]) -> Result<Command, ParseError> {
     let Some((last, head)) = tokens.split_last() else {
         return Err(ParseError::MissingTask);
     };
@@ -327,12 +450,12 @@ fn parse_due(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
         )
     };
     Ok(Command::SetDue {
-        node: resolve_node(graph, &join(head))?,
+        node: scope.node(&join(head))?,
         due,
     })
 }
 
-fn parse_move(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
+fn parse_move(scope: &Scope<'_>, tokens: &[String]) -> Result<Command, ParseError> {
     let at = tokens
         .iter()
         .position(|t| t.eq_ignore_ascii_case("in"))
@@ -341,8 +464,8 @@ fn parse_move(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
         return Err(ParseError::MissingTask);
     }
     Ok(Command::SetArea {
-        node: resolve_node(graph, &join(&tokens[..at]))?,
-        area: resolve_area(graph, &join(&tokens[at + 1..]))?,
+        node: scope.node(&join(&tokens[..at]))?,
+        area: scope.area(&join(&tokens[at + 1..]))?,
     })
 }
 
@@ -364,7 +487,7 @@ fn parse_area(tokens: &[String]) -> Result<Command, ParseError> {
     })
 }
 
-fn parse_link(graph: &Graph, adding: bool, tokens: &[String]) -> Result<Command, ParseError> {
+fn parse_link(scope: &Scope<'_>, adding: bool, tokens: &[String]) -> Result<Command, ParseError> {
     let at = tokens
         .iter()
         .position(|t| {
@@ -376,8 +499,8 @@ fn parse_link(graph: &Graph, adding: bool, tokens: &[String]) -> Result<Command,
         return Err(ParseError::MissingSeparator);
     }
 
-    let left = resolve_node(graph, &join(&tokens[..at]))?;
-    let right = resolve_node(graph, &join(&tokens[at + 1..]))?;
+    let left = scope.node(&join(&tokens[..at]))?;
+    let right = scope.node(&join(&tokens[at + 1..]))?;
     let inverted = {
         let w = tokens[at].to_ascii_lowercase();
         w == "before" || w == "blocks"
@@ -403,7 +526,7 @@ fn parse_link(graph: &Graph, adding: bool, tokens: &[String]) -> Result<Command,
     })
 }
 
-fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
+fn parse_add(scope: &Scope<'_>, tokens: &[String]) -> Result<Command, ParseError> {
     let mut at = 0;
     let mut name_parts: Vec<String> = Vec::new();
     while at < tokens.len() && !is_keyword(&tokens[at]) {
@@ -454,9 +577,9 @@ fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
 
     // with no `in`, fall back to the only area there is
     let area = if let Some(reference) = area_ref {
-        resolve_area(graph, &reference)?
+        scope.area(&reference)?
     } else {
-        let mut areas = graph.areas().map(|(id, _)| id);
+        let mut areas = scope.graph.areas().map(|(id, _)| id);
         let only = areas.next().ok_or(ParseError::NoAreas)?;
         if areas.next().is_some() {
             return Err(ParseError::NoSuchArea("in <direction>".to_string()));
@@ -466,11 +589,11 @@ fn parse_add(graph: &Graph, tokens: &[String]) -> Result<Command, ParseError> {
 
     let mut prereqs = BTreeSet::new();
     for reference in &after {
-        prereqs.insert(resolve_node(graph, reference)?);
+        prereqs.insert(scope.node(reference)?);
     }
     let mut dependents = BTreeSet::new();
     for reference in &before {
-        dependents.insert(resolve_node(graph, reference)?);
+        dependents.insert(scope.node(reference)?);
     }
 
     Ok(Command::AddNode {
