@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use branchy_core::{Error, Graph, NewArea, NewNode, NodeId, Status};
+use branchy_core::{AreaId, Error, Graph, NewArea, NewNode, NodeId, Status};
 
 /// A graph with one area and the named nodes, none of them done.
 fn fixture(names: &[&str]) -> (Graph, BTreeMap<String, NodeId>) {
@@ -82,6 +82,33 @@ fn builder_sets_note_and_priority() {
     let node = graph.node(id).expect("just added");
     assert_eq!(node.note, "why");
     assert_eq!(node.priority, 9);
+}
+
+#[test]
+fn a_removed_id_stays_spent() {
+    let (mut graph, ids) = fixture(&["a", "b"]);
+    graph.remove_node(ids["b"]).expect("exists");
+    assert_eq!(graph.next_node_id(), NodeId::new(2));
+}
+
+#[test]
+fn reserving_ids_carries_spent_ids_into_a_fresh_graph() {
+    let mut graph = Graph::new();
+    graph.reserve_ids(NodeId::new(7), AreaId::new(3));
+    let area = graph.add_area(NewArea::new("a", "#fff"));
+    let node = graph
+        .add_node(NewNode::new("x", area))
+        .expect("area exists");
+    assert_eq!(area, AreaId::new(3));
+    assert_eq!(node, NodeId::new(7));
+}
+
+#[test]
+fn reserving_ids_never_moves_a_counter_back() {
+    let (mut graph, _) = fixture(&["a", "b", "c"]);
+    graph.reserve_ids(NodeId::new(0), AreaId::new(0));
+    assert_eq!(graph.next_node_id(), NodeId::new(3));
+    assert_eq!(graph.next_area_id(), AreaId::new(1));
 }
 
 // ── edges ────────────────────────────────────────────────────────────────

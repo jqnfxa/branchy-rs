@@ -33,6 +33,16 @@ const LOCAL_DIR: &str = ".branchy";
 #[derive(Debug, Serialize, Deserialize)]
 struct Document {
     version: u32,
+    /// The id the next node will get. Stored because it is not always one
+    /// past the highest id present: a removed node's id stays spent, and
+    /// working the counter out from what is left would hand it out again.
+    /// Absent in documents written before 0.2.8, hence the default, which
+    /// leaves the counter where the loaded ids put it.
+    #[serde(default)]
+    next_node: u64,
+    /// The id the next area will get, for the same reason.
+    #[serde(default)]
+    next_area: u64,
     areas: Vec<AreaRecord>,
     nodes: Vec<NodeRecord>,
 }
@@ -166,6 +176,8 @@ impl Document {
     fn from_graph(graph: &Graph) -> Self {
         Self {
             version: FORMAT_VERSION,
+            next_node: graph.next_node_id().raw(),
+            next_area: graph.next_area_id().raw(),
             areas: graph
                 .areas()
                 .map(|(id, area)| AreaRecord {
@@ -205,6 +217,7 @@ impl Document {
             return Err(StoreError::Version(self.version));
         }
         let mut graph = Graph::new();
+        graph.reserve_ids(NodeId::new(self.next_node), AreaId::new(self.next_area));
         for record in self.areas {
             graph.apply(Command::RestoreArea {
                 id: AreaId::new(record.id),
@@ -247,6 +260,15 @@ impl Document {
             }
         }
         Ok(graph)
+    }
+
+    /// The ids this document has spent: the stored counters, or one past the
+    /// highest id present when that is further on, as it is in a document
+    /// written before the counters were stored.
+    fn spent(&self) -> (u64, u64) {
+        let node = self.nodes.iter().map(|n| n.id + 1).max().unwrap_or(0);
+        let area = self.areas.iter().map(|a| a.id + 1).max().unwrap_or(0);
+        (self.next_node.max(node), self.next_area.max(area))
     }
 }
 
@@ -402,7 +424,12 @@ pub fn undo(path: &Path) -> Result<(), StoreError> {
     if !newest.exists() {
         return Err(StoreError::NothingToUndo);
     }
+    // read before the rename, which is what throws this document away
+    let spent = read_document(path).map(|document| document.spent());
     fs::rename(&newest, path)?;
+    if let Some(spent) = spent {
+        keep_spent(path, spent)?;
+    }
 
     // everything older moves up one place
     for slot in 2..=UNDO_DEPTH {
@@ -413,6 +440,35 @@ pub fn undo(path: &Path) -> Result<(), StoreError> {
         fs::rename(&from, undo_path(path, slot - 1))?;
     }
     Ok(())
+}
+
+/// Carries spent ids forward into a document brought back by undo.
+///
+/// Undo puts back a whole older document, and with it an older id counter.
+/// Without this, undoing an addition would free its id for the next one, and
+/// that id may already have been seen elsewhere: by another device once sync
+/// exists, and by a script or an agent that remembered it today.
+///
+/// A document that does not parse is left exactly as it is, because undo is
+/// also how a broken document gets recovered by hand.
+fn keep_spent(path: &Path, (node, area): (u64, u64)) -> Result<(), StoreError> {
+    let Some(mut document) = read_document(path) else {
+        return Ok(());
+    };
+    let (had_node, had_area) = document.spent();
+    if had_node >= node && had_area >= area {
+        return Ok(());
+    }
+    document.next_node = had_node.max(node);
+    document.next_area = had_area.max(area);
+    write_atomically(path, &serde_json::to_string_pretty(&document)?)?;
+    Ok(())
+}
+
+/// The document at `path`, or `None` if it is missing or does not parse.
+fn read_document(path: &Path) -> Option<Document> {
+    let text = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
 }
 
 /// How many changes could still be taken back.

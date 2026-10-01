@@ -168,6 +168,35 @@ impl Graph {
         self.nodes.is_empty()
     }
 
+    // ── id counters ──────────────────────────────────────────────────────
+
+    /// The id the next [`add_node`](Self::add_node) will hand out.
+    ///
+    /// Not necessarily one past the highest id present: the id of a removed
+    /// node stays spent. Anything that stores a graph has to store this too,
+    /// or a reload would hand the removed id to a different node.
+    #[must_use]
+    pub const fn next_node_id(&self) -> NodeId {
+        NodeId::new(self.next_node)
+    }
+
+    /// The id the next [`add_area`](Self::add_area) will hand out. See
+    /// [`next_node_id`](Self::next_node_id).
+    #[must_use]
+    pub const fn next_area_id(&self) -> AreaId {
+        AreaId::new(self.next_area)
+    }
+
+    /// Never hand out a node id below `node` or an area id below `area`.
+    ///
+    /// Only ever moves the counters forward, so passing a stale or zero value
+    /// is harmless. This is how a stored graph gets back the ids it had
+    /// already spent on things that no longer exist.
+    pub fn reserve_ids(&mut self, node: NodeId, area: AreaId) {
+        self.next_node = self.next_node.max(node.raw());
+        self.next_area = self.next_area.max(area.raw());
+    }
+
     /// Removes a node and strips it from every node that needed it.
     ///
     /// # Errors

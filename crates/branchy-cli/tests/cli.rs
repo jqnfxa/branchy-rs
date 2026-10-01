@@ -430,6 +430,55 @@ fn a_brand_new_graph_says_how_to_start_not_to_look_for_cycles() {
     assert!(run(&scratch, &["queue"]).contains("branchy add"));
 }
 
+// ── ids are never handed out twice ──────────────────────────────────────
+
+#[test]
+fn a_removed_task_keeps_its_id_after_a_reload() {
+    let scratch = Scratch::new("spent-node");
+    run(&scratch, &["area", "Work"]);
+    run(&scratch, &["add", "First"]);
+    assert!(run(&scratch, &["add", "Second"]).contains("n1"));
+    run(&scratch, &["rm", "Second"]);
+    let third = run(&scratch, &["add", "Third"]);
+    assert!(third.contains("n2"), "n1 was spent on Second: {third}");
+}
+
+#[test]
+fn an_undone_addition_keeps_its_id_spent() {
+    let scratch = Scratch::new("spent-undo");
+    run(&scratch, &["area", "Work"]);
+    run(&scratch, &["add", "First"]);
+    assert!(run(&scratch, &["add", "Second"]).contains("n1"));
+    run(&scratch, &["undo"]);
+    let third = run(&scratch, &["add", "Third"]);
+    assert!(third.contains("n2"), "n1 was spent on Second: {third}");
+}
+
+#[test]
+fn a_removed_direction_keeps_its_id_after_a_reload() {
+    let scratch = Scratch::new("spent-area");
+    run(&scratch, &["area", "Work"]);
+    run(&scratch, &["area", "Spare"]);
+    run(&scratch, &["rmarea", "Spare"]);
+    run(&scratch, &["area", "Health"]);
+    let snapshot = run(&scratch, &["snapshot"]);
+    assert!(snapshot.contains(r#""id": "a2""#), "{snapshot}");
+    assert!(!snapshot.contains(r#""id": "a1""#), "{snapshot}");
+}
+
+#[test]
+fn a_document_without_counters_continues_from_its_highest_id() {
+    let scratch = Scratch::new("no-counters");
+    std::fs::write(
+        scratch.path(),
+        r##"{"version":1,
+            "areas":[{"id":0,"name":"Work","color":"#4fd1c5"}],
+            "nodes":[{"id":4,"name":"Old task","area":0,"priority":5,"done":false}]}"##,
+    )
+    .expect("write");
+    assert!(run(&scratch, &["add", "New task"]).contains("n5"));
+}
+
 // ── a document reached through a symlink ────────────────────────────────
 
 #[cfg(unix)]
