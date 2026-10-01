@@ -130,6 +130,47 @@ fn limited(ids: Vec<NodeId>, limit: Option<usize>) -> Vec<NodeId> {
     }
 }
 
+/// Where things stand: counts, every direction, the top of the queue, what is
+/// due within a week, and how many cycles. See `render::brief`.
+#[must_use]
+pub fn brief(graph: &Graph, title: &str, limit: usize) -> String {
+    let now = today();
+    let counts = crate::render::Counts::of(graph);
+    let mut out = format!("# vault {}\ttoday {now}\n", flat(title));
+    let _ = writeln!(
+        out,
+        "# tasks {}\tdone {}\tavailable {}\tlocked {}\tcyclic {}\toverdue {}",
+        counts.total, counts.done, counts.available, counts.locked, counts.cyclic, counts.overdue
+    );
+    for (id, area) in graph.areas() {
+        let (done, total) = crate::render::area_progress(graph, id);
+        let _ = writeln!(out, "# {id}\t{}\t{done}/{total}", flat(&area.name));
+    }
+    let derived = Derived::of(graph);
+
+    let queue = graph.queue();
+    count(&mut out, queue.len().min(limit), queue.len(), "available");
+    out.push_str(HEADER);
+    for id in queue.iter().take(limit) {
+        row(&mut out, graph, &derived, *id);
+    }
+
+    let soon = crate::render::due_soon(graph, now);
+    if !soon.is_empty() {
+        count(
+            &mut out,
+            soon.len().min(limit),
+            soon.len(),
+            "due within a week",
+        );
+        for (_, id) in soon.iter().take(limit) {
+            row(&mut out, graph, &derived, *id);
+        }
+    }
+    let _ = writeln!(out, "# cycles {}", graph.find_cycles().len());
+    out
+}
+
 /// The available frontier, most urgent first.
 #[must_use]
 pub fn queue(graph: &Graph, limit: Option<usize>) -> String {

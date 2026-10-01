@@ -977,3 +977,34 @@ fn a_plain_batch_prints_what_it_made_with_labels() {
     assert!(ok, "{err}");
     assert_eq!(out, "a0\t$w\nn0\t$a\nn1\n");
 }
+
+#[test]
+fn brief_gives_counts_directions_and_the_top_of_the_queue() {
+    let scratch = seeded("brief");
+    run(&scratch, &["done", "school"]);
+    let human = run(&scratch, &["brief"]);
+    assert!(
+        human.contains("3 tasks: 1 done, 1 available, 1 locked."),
+        "{human}"
+    );
+    assert!(human.contains("a0    Hard skills"), "{human}");
+    assert!(human.contains("n1     Calculus"), "{human}");
+
+    let plain = run(&scratch, &["--plain", "brief", "--limit", "1"]);
+    assert!(
+        plain.contains("# tasks 3\tdone 1\tavailable 1\tlocked 1\tcyclic 0\toverdue 0"),
+        "{plain}"
+    );
+    assert!(plain.contains("# a0\tHard skills\t1/3"), "{plain}");
+    assert!(
+        plain.contains("n1\tavailable\t6\ta0\t1\t-\tn0\tCalculus"),
+        "{plain}"
+    );
+    assert!(plain.ends_with("# cycles 0\n"), "{plain}");
+}
+
+#[test]
+fn brief_on_an_empty_graph_says_how_to_start() {
+    let scratch = Scratch::new("brief-empty");
+    assert!(run(&scratch, &["brief"]).contains("branchy area"));
+}

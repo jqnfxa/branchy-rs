@@ -86,6 +86,12 @@ enum Cmd {
     /// name what it creates, and later lines refer to it as `$x`.
     Run(Rest),
 
+    /// Where things stand, in one screen. The first thing to run.
+    Brief {
+        /// How many tasks to show from the queue, and from what is due soon
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
     /// Everything available now, most urgent first
     Queue {
         /// Only the first this many
@@ -209,6 +215,14 @@ fn run(cli: &Cli) -> Result<String, String> {
     let graph = load(&path)?;
 
     let plain = cli.plain;
+    if let Cmd::Brief { limit } = &cli.command {
+        let title = vault_title(&path);
+        return Ok(if plain {
+            plain::brief(&graph, &title, *limit)
+        } else {
+            render::brief(&graph, &title, *limit)
+        });
+    }
     if let Some(shown) = view(&cli.command, &graph, plain) {
         return shown;
     }
@@ -241,7 +255,8 @@ fn run(cli: &Cli) -> Result<String, String> {
         Cmd::RecolorArea(rest) => line("recolor-area", &rest.args),
         Cmd::Rmarea(rest) => line("rmarea", &rest.args),
         Cmd::Run(rest) => join(&rest.args),
-        Cmd::Queue { .. }
+        Cmd::Brief { .. }
+        | Cmd::Queue { .. }
         | Cmd::List { .. }
         | Cmd::Tree
         | Cmd::Why(_)
@@ -362,6 +377,14 @@ fn batch(path: &Path, graph: Graph, text: &str, plain: bool) -> Result<String, S
 fn resolve(graph: &Graph, args: &[String]) -> Result<branchy_core::NodeId, String> {
     branchy_core::resolve_node(graph, &args.join(" "))
         .map_err(|e| branchy_app::edit::describe_parse(graph, &e))
+}
+
+/// What to call the document in a heading: its vault's folder name.
+fn vault_title(path: &Path) -> String {
+    path.parent().and_then(Path::file_name).map_or_else(
+        || "branchy".to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
 }
 
 /// Which document a command works on.

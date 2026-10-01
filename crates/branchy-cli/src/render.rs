@@ -91,6 +91,146 @@ pub fn queue(graph: &Graph, limit: Option<usize>) -> String {
     out
 }
 
+/// Where things stand, in one screen: the counts, the directions, the top of
+/// the queue, whatever is due within a week, and any cycles.
+///
+/// The first thing to run in a session, and the one call an agent needs to
+/// orient itself before it touches anything.
+#[must_use]
+pub fn brief(graph: &Graph, title: &str, limit: usize) -> String {
+    if graph.is_empty() {
+        return queue(graph, None);
+    }
+    let now = today();
+    let counts = Counts::of(graph);
+    let mut out = format!("{title}, today {now}\n");
+    let _ = writeln!(out, "{}", counts.sentence());
+
+    out.push_str("\nDirections:\n");
+    for (id, area) in graph.areas() {
+        let (done, total) = area_progress(graph, id);
+        row(
+            &mut out,
+            &format!("  {:<5} {:<30} {done}/{total}", id.to_string(), area.name),
+        );
+    }
+
+    out.push('\n');
+    out.push_str(&queue(graph, Some(limit)));
+
+    let soon = due_soon(graph, now);
+    if !soon.is_empty() {
+        let statuses = graph.statuses();
+        let _ = writeln!(out, "\nDue within a week ({}):", soon.len());
+        for (date, id) in soon.iter().take(limit) {
+            let Some(node) = graph.node(*id) else {
+                continue;
+            };
+            row(
+                &mut out,
+                &format!(
+                    "  {} {date}  {:<6} {:<38} {}",
+                    mark(statuses.get(id).copied().unwrap_or(Status::Locked)),
+                    id.to_string(),
+                    truncate(&node.name, 38),
+                    when(now.days_until(*date)),
+                ),
+            );
+        }
+    }
+
+    let cycles = graph.find_cycles().len();
+    if cycles > 0 {
+        let _ = writeln!(
+            out,
+            "\n{cycles} cycle(s). `branchy cycles` shows how to break them."
+        );
+    }
+    out
+}
+
+/// How many tasks stand where.
+pub struct Counts {
+    /// Every task.
+    pub total: usize,
+    /// Finished.
+    pub done: usize,
+    /// Ready to start.
+    pub available: usize,
+    /// Waiting on a prerequisite.
+    pub locked: usize,
+    /// On or after a cycle.
+    pub cyclic: usize,
+    /// Unfinished and past their deadline.
+    pub overdue: usize,
+}
+
+impl Counts {
+    /// Counts a graph.
+    #[must_use]
+    pub fn of(graph: &Graph) -> Self {
+        let statuses = graph.statuses();
+        let of = |want: Status| statuses.values().filter(|s| **s == want).count();
+        let now = today();
+        Self {
+            total: graph.node_count(),
+            done: of(Status::Done),
+            available: of(Status::Available),
+            locked: of(Status::Locked),
+            cyclic: of(Status::Cyclic),
+            overdue: graph
+                .effective_due()
+                .iter()
+                .filter(|(id, date)| {
+                    **date < now && statuses.get(id).is_some_and(|s| *s != Status::Done)
+                })
+                .count(),
+        }
+    }
+
+    fn sentence(&self) -> String {
+        let mut line = format!(
+            "{} tasks: {} done, {} available, {} locked",
+            self.total, self.done, self.available, self.locked
+        );
+        if self.cyclic > 0 {
+            let _ = write!(line, ", {} cyclic", self.cyclic);
+        }
+        if self.overdue > 0 {
+            let _ = write!(line, ". {} overdue", self.overdue);
+        }
+        line.push('.');
+        line
+    }
+}
+
+/// How many of a direction's tasks are done, out of how many.
+#[must_use]
+pub fn area_progress(graph: &Graph, area: branchy_core::AreaId) -> (usize, usize) {
+    let held: Vec<bool> = graph
+        .nodes()
+        .filter(|(_, node)| node.area == area)
+        .map(|(_, node)| node.done)
+        .collect();
+    (held.iter().filter(|done| **done).count(), held.len())
+}
+
+/// Unfinished tasks due within a week or already late, soonest first.
+#[must_use]
+pub fn due_soon(graph: &Graph, now: Date) -> Vec<(Date, NodeId)> {
+    let statuses = graph.statuses();
+    let mut soon: Vec<(Date, NodeId)> = graph
+        .effective_due()
+        .into_iter()
+        .filter(|(id, date)| {
+            statuses.get(id) != Some(&Status::Done) && Urgency::of(*date, now) != Urgency::Later
+        })
+        .map(|(id, date)| (date, id))
+        .collect();
+    soon.sort_unstable();
+    soon
+}
+
 /// Every task, grouped by direction, optionally filtered.
 #[must_use]
 pub fn list(
