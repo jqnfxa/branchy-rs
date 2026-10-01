@@ -69,8 +69,9 @@ pub fn queue(graph: &Graph) -> String {
         row(
             &mut out,
             &format!(
-                "{:>3}. {:<38} p{:<3} {:<14} {deadline}{}",
+                "{:>3}. {:<6} {:<38} p{:<3} {:<14} {deadline}{}",
                 rank + 1,
+                id.to_string(),
                 truncate(&node.name, 38),
                 node.priority,
                 truncate(&area_of(graph, *id), 14),
@@ -237,8 +238,9 @@ pub fn why(graph: &Graph, id: NodeId) -> String {
                 row(
                     &mut out,
                     &format!(
-                        "{:>3}. {:<38} p{:<3} {}",
+                        "{:>3}. {:<6} {:<38} p{:<3} {}",
                         step + 1,
+                        blocker.to_string(),
                         truncate(&blocking.name, 38),
                         blocking.priority,
                         truncate(&area_of(graph, *blocker), 16),
@@ -294,8 +296,9 @@ pub fn show(graph: &Graph, id: NodeId) -> String {
             let met = graph.node(*prereq).is_some_and(|n| n.done);
             let _ = writeln!(
                 out,
-                "    [{}] {}",
+                "    [{}] {:<6} {}",
                 if met { "x" } else { " " },
+                prereq.to_string(),
                 name_of(graph, *prereq)
             );
         }
@@ -307,7 +310,12 @@ pub fn show(graph: &Graph, id: NodeId) -> String {
         out.push_str("    nothing yet\n");
     } else {
         for dependent in dependents {
-            let _ = writeln!(out, "    {}", name_of(graph, dependent));
+            let _ = writeln!(
+                out,
+                "    {:<6} {}",
+                dependent.to_string(),
+                name_of(graph, dependent)
+            );
         }
     }
     out
@@ -348,9 +356,10 @@ pub fn calendar(graph: &Graph) -> String {
         row(
             &mut out,
             &format!(
-                "  {} {}  {:<36} {:<12} {}",
+                "  {} {}  {:<6} {:<36} {:<12} {}",
                 mark(statuses.get(&id).copied().unwrap_or(Status::Locked)),
                 date,
+                id.to_string(),
                 truncate(&node.name, 36),
                 truncate(&area_of(graph, id), 12),
                 if inherited {
