@@ -4,6 +4,7 @@
 //! it to `branchy_core::parse`, so the grammar lives in exactly one place and
 //! the terminal and the in-app command line can never drift apart.
 
+mod plain;
 mod render;
 
 use branchy_app::{Made, StoreError, Vault, Vaults, snapshot, store};
@@ -28,6 +29,11 @@ struct Cli {
     /// the vault opened last, here or in the window.
     #[arg(long, global = true, value_name = "NAME|FOLDER")]
     vault: Option<String>,
+
+    /// Print for a program or an agent: one tab-separated line per task,
+    /// names never shortened, other tasks and directions referred to by id.
+    #[arg(long, global = true)]
+    plain: bool,
 
     #[command(subcommand)]
     command: Cmd,
@@ -80,8 +86,12 @@ enum Cmd {
     /// name what it creates, and later lines refer to it as `$x`.
     Run(Rest),
 
-    /// Everything available now, highest priority first
-    Queue,
+    /// Everything available now, most urgent first
+    Queue {
+        /// Only the first this many
+        #[arg(long)]
+        limit: Option<usize>,
+    },
     /// Every task, grouped by direction
     List {
         /// Only this direction
@@ -90,6 +100,9 @@ enum Cmd {
         /// Only this status: done, available, locked, cyclic
         #[arg(long)]
         status: Option<String>,
+        /// Only the first this many
+        #[arg(long)]
+        limit: Option<usize>,
     },
     /// The whole graph, by direction and tier
     Tree,
@@ -98,7 +111,11 @@ enum Cmd {
     /// One task in full
     Show(Rest),
     /// Everything with a deadline, grouped by how soon it is
-    Calendar,
+    Calendar {
+        /// Only the first this many
+        #[arg(long)]
+        limit: Option<usize>,
+    },
     /// Report dependency cycles and how to break them
     Cycles,
     /// Print the whole graph as JSON, exactly as a user interface receives it
@@ -191,34 +208,9 @@ fn run(cli: &Cli) -> Result<String, String> {
 
     let graph = load(&path)?;
 
-    match &cli.command {
-        Cmd::Queue => return Ok(render::queue(&graph)),
-        Cmd::Tree => return Ok(render::tree(&graph)),
-        Cmd::Cycles => return Ok(render::cycles(&graph)),
-        Cmd::Calendar => return Ok(render::calendar(&graph)),
-        Cmd::Snapshot => {
-            let json = serde_json::to_string_pretty(&snapshot::Snapshot::of(&graph))
-                .map_err(|e| e.to_string())?;
-            return Ok(format!("{json}\n"));
-        }
-        Cmd::List { area, status } => {
-            let wanted = match status.as_deref() {
-                None => None,
-                Some(word) => Some(parse_status(word)?),
-            };
-            return Ok(render::list(&graph, area.as_deref(), wanted));
-        }
-        Cmd::Why(rest) => {
-            let id = branchy_core::resolve_node(&graph, &rest.args.join(" "))
-                .map_err(|e| e.to_string())?;
-            return Ok(render::why(&graph, id));
-        }
-        Cmd::Show(rest) => {
-            let id = branchy_core::resolve_node(&graph, &rest.args.join(" "))
-                .map_err(|e| e.to_string())?;
-            return Ok(render::show(&graph, id));
-        }
-        _ => {}
+    let plain = cli.plain;
+    if let Some(shown) = view(&cli.command, &graph, plain) {
+        return shown;
     }
 
     // everything else is a mutation, expressed in the shared grammar
@@ -228,7 +220,7 @@ fn run(cli: &Cli) -> Result<String, String> {
             std::io::stdin()
                 .read_to_string(&mut text)
                 .map_err(|e| format!("could not read the batch from stdin: {e}"))?;
-            return batch(&path, graph, &text);
+            return batch(&path, graph, &text, plain);
         }
     }
 
@@ -249,13 +241,13 @@ fn run(cli: &Cli) -> Result<String, String> {
         Cmd::RecolorArea(rest) => line("recolor-area", &rest.args),
         Cmd::Rmarea(rest) => line("rmarea", &rest.args),
         Cmd::Run(rest) => join(&rest.args),
-        Cmd::Queue
+        Cmd::Queue { .. }
         | Cmd::List { .. }
         | Cmd::Tree
         | Cmd::Why(_)
         | Cmd::Show(_)
         | Cmd::Cycles
-        | Cmd::Calendar
+        | Cmd::Calendar { .. }
         | Cmd::Snapshot
         | Cmd::Undo
         | Cmd::Where
@@ -265,6 +257,9 @@ fn run(cli: &Cli) -> Result<String, String> {
     let edit = branchy_app::apply_lines(graph, &[line]).map_err(|e| e.message)?;
     let graph = edit.graph;
     store::save(&path, &graph).map_err(|e| e.to_string())?;
+    if plain {
+        return Ok(plain::changed(&graph, edit.node));
+    }
 
     let mut out = String::new();
     if let Some(id) = edit.node {
@@ -282,16 +277,66 @@ fn run(cli: &Cli) -> Result<String, String> {
     Ok(out)
 }
 
+/// The read-only views, or `None` for a command that changes something.
+fn view(command: &Cmd, graph: &Graph, plain: bool) -> Option<Result<String, String>> {
+    let shown = match command {
+        Cmd::Queue { limit } if plain => Ok(plain::queue(graph, *limit)),
+        Cmd::Queue { limit } => Ok(render::queue(graph, *limit)),
+        Cmd::Tree if plain => Ok(plain::tree(graph)),
+        Cmd::Tree => Ok(render::tree(graph)),
+        Cmd::Cycles => Ok(render::cycles(graph)),
+        Cmd::Calendar { limit } if plain => Ok(plain::calendar(graph, *limit)),
+        Cmd::Calendar { limit } => Ok(render::calendar(graph, *limit)),
+        Cmd::Snapshot => serde_json::to_string_pretty(&snapshot::Snapshot::of(graph))
+            .map(|json| format!("{json}\n"))
+            .map_err(|e| e.to_string()),
+        Cmd::List {
+            area,
+            status,
+            limit,
+        } => status
+            .as_deref()
+            .map(parse_status)
+            .transpose()
+            .map(|wanted| {
+                if plain {
+                    plain::list(graph, area.as_deref(), wanted, *limit)
+                } else {
+                    render::list(graph, area.as_deref(), wanted, *limit)
+                }
+            }),
+        Cmd::Why(rest) => resolve(graph, &rest.args).map(|id| {
+            if plain {
+                plain::why(graph, id)
+            } else {
+                render::why(graph, id)
+            }
+        }),
+        Cmd::Show(rest) => resolve(graph, &rest.args).map(|id| {
+            if plain {
+                plain::show(graph, id)
+            } else {
+                render::show(graph, id)
+            }
+        }),
+        _ => return None,
+    };
+    Some(shown)
+}
+
 /// Applies a whole batch as one change.
 ///
 /// A refusal names its line, because in a batch of two hundred the message
 /// alone does not say where to look. Nothing is saved unless every line was
 /// accepted.
-fn batch(path: &Path, graph: Graph, text: &str) -> Result<String, String> {
+fn batch(path: &Path, graph: Graph, text: &str, plain: bool) -> Result<String, String> {
     let lines: Vec<&str> = text.lines().collect();
     let edit = branchy_app::apply_lines(graph, &lines)
         .map_err(|e| format!("line {}: {}", e.line, e.message))?;
     store::save(path, &edit.graph).map_err(|e| e.to_string())?;
+    if plain {
+        return Ok(plain::made(&edit.made));
+    }
 
     let mut out = format!(
         "Applied {} command{}.\n",
@@ -311,6 +356,12 @@ fn batch(path: &Path, graph: Graph, text: &str) -> Result<String, String> {
     }
     let _ = writeln!(out, "{}", tally(&edit.graph));
     Ok(out)
+}
+
+/// The one task a reference names, explained in words when it names several.
+fn resolve(graph: &Graph, args: &[String]) -> Result<branchy_core::NodeId, String> {
+    branchy_core::resolve_node(graph, &args.join(" "))
+        .map_err(|e| branchy_app::edit::describe_parse(graph, &e))
 }
 
 /// Which document a command works on.

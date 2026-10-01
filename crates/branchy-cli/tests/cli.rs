@@ -896,3 +896,84 @@ fn a_batch_of_comments_is_refused_as_empty() {
     assert!(!ok);
     assert!(err.contains("nothing to do"), "{err}");
 }
+
+// ── plain output, for programs and agents ───────────────────────────────
+
+#[test]
+fn plain_rows_carry_ids_and_whole_names() {
+    let scratch = seeded("plain-queue");
+    let long = "A task whose name is far too long to fit any column of the human view";
+    run(&scratch, &["add", long, "pri", "9"]);
+    let out = run(&scratch, &["--plain", "queue"]);
+    assert!(
+        out.contains("# id\tstatus\tpri\tarea\ttier\tdue\tneeds\tname"),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!("n3\tavailable\t9\ta0\t0\t-\t-\t{long}")),
+        "{out}"
+    );
+    assert!(out.contains("# a0\tHard skills"), "{out}");
+}
+
+#[test]
+fn plain_rows_refer_to_prerequisites_by_id() {
+    let scratch = seeded("plain-tree");
+    let out = run(&scratch, &["--plain", "tree"]);
+    assert!(
+        out.contains("n2\tlocked\t8\ta0\t2\t-\tn1\tProbability theory"),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_limit_says_how_much_was_left_out() {
+    let scratch = Scratch::new("limit");
+    run(&scratch, &["area", "Work"]);
+    for name in ["One", "Two", "Three"] {
+        run(&scratch, &["add", name]);
+    }
+    let plain = run(&scratch, &["--plain", "queue", "--limit", "2"]);
+    assert!(plain.starts_with("# 2 of 3 available"), "{plain}");
+    assert_eq!(plain.lines().filter(|l| !l.starts_with('#')).count(), 2);
+    let human = run(&scratch, &["queue", "--limit", "1"]);
+    assert!(human.starts_with("1 of 3 available"), "{human}");
+    assert_eq!(
+        run(&scratch, &["list", "--limit", "2"])
+            .lines()
+            .filter(|l| l.contains("[ ]"))
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn plain_show_ends_with_the_note_as_written() {
+    let scratch = seeded("plain-show");
+    run(
+        &scratch,
+        &["note", "calculus", "Limits first, then series."],
+    );
+    let out = run(&scratch, &["--plain", "show", "calculus"]);
+    assert!(out.contains("unlocks\tn2"), "{out}");
+    assert!(out.ends_with("note\tLimits first, then series.\n"), "{out}");
+}
+
+#[test]
+fn a_plain_change_prints_the_row_it_changed() {
+    let scratch = seeded("plain-change");
+    let out = run(&scratch, &["--plain", "done", "school"]);
+    assert_eq!(out, "n0\tdone\t3\ta0\t0\t-\t-\tSchool algebra\n");
+}
+
+#[test]
+fn a_plain_batch_prints_what_it_made_with_labels() {
+    let scratch = Scratch::new("plain-batch");
+    let (ok, out, err) = run_with_input(
+        &scratch,
+        &["--plain", "run", "-"],
+        "$w = area Work\n$a = add Alpha in $w\nadd Beta in $w after $a\n",
+    );
+    assert!(ok, "{err}");
+    assert_eq!(out, "a0\t$w\nn0\t$a\nn1\n");
+}

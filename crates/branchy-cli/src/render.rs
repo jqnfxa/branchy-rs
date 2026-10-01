@@ -40,7 +40,7 @@ fn row(out: &mut String, text: &str) {
 
 /// The available frontier, highest priority first.
 #[must_use]
-pub fn queue(graph: &Graph) -> String {
+pub fn queue(graph: &Graph, limit: Option<usize>) -> String {
     let queue = graph.queue();
     let deadlines = graph.effective_due();
     let now = today();
@@ -57,8 +57,13 @@ pub fn queue(graph: &Graph) -> String {
         }
         return "Nothing is available. Try `branchy cycles`, or finish something first.\n".into();
     }
-    let mut out = format!("{} available:\n", queue.len());
-    for (rank, id) in queue.iter().enumerate() {
+    let shown = limit.map_or(queue.len(), |n| n.min(queue.len()));
+    let mut out = if shown < queue.len() {
+        format!("{shown} of {} available:\n", queue.len())
+    } else {
+        format!("{} available:\n", queue.len())
+    };
+    for (rank, id) in queue.iter().take(shown).enumerate() {
         let Some(node) = graph.node(*id) else {
             continue;
         };
@@ -88,11 +93,20 @@ pub fn queue(graph: &Graph) -> String {
 
 /// Every task, grouped by direction, optionally filtered.
 #[must_use]
-pub fn list(graph: &Graph, area_filter: Option<&str>, status_filter: Option<Status>) -> String {
+pub fn list(
+    graph: &Graph,
+    area_filter: Option<&str>,
+    status_filter: Option<Status>,
+    limit: Option<usize>,
+) -> String {
     let statuses = graph.statuses();
     let mut out = String::new();
+    let mut left = limit.unwrap_or(usize::MAX);
 
     for (area_id, area) in graph.areas() {
+        if left == 0 {
+            break;
+        }
         if let Some(wanted) = area_filter {
             if !area.name.to_lowercase().contains(&wanted.to_lowercase()) {
                 continue;
@@ -118,6 +132,10 @@ pub fn list(graph: &Graph, area_filter: Option<&str>, status_filter: Option<Stat
         let _ = writeln!(out, "\n{}  {done}/{total}", area.name);
 
         for id in rows {
+            if left == 0 {
+                break;
+            }
+            left -= 1;
             let Some(node) = graph.node(id) else { continue };
             let status = statuses.get(&id).copied().unwrap_or(Status::Locked);
             row(
@@ -326,7 +344,7 @@ pub fn show(graph: &Graph, id: NodeId) -> String {
 /// Inherited deadlines are shown alongside written ones and marked, because a
 /// task is just as due whether the date is on it or on the thing it unblocks.
 #[must_use]
-pub fn calendar(graph: &Graph) -> String {
+pub fn calendar(graph: &Graph, limit: Option<usize>) -> String {
     let now = today();
     let deadlines = graph.effective_due();
     let statuses = graph.statuses();
@@ -340,6 +358,7 @@ pub fn calendar(graph: &Graph) -> String {
         return "Nothing has a deadline. Try `branchy due <task> 2026-12-31`.\n".into();
     }
     rows.sort_unstable();
+    rows.truncate(limit.unwrap_or(usize::MAX));
 
     let mut out = format!("Today is {now}.\n");
     let mut heading: Option<&'static str> = None;
