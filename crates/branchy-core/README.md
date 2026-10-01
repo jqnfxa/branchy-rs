@@ -30,6 +30,7 @@ fn main() -> Result<(), branchy_core::Error> {
 ## What it computes
 
 - **Status** — `Locked`, `Available`, `Done`, or `Cyclic`. Never stored, so it cannot disagree with the edges.
+- **Board** — each task's stored `Stage` (backlog, todo, doing, review, done) laid out in columns, the backlog split into ready and locked. Only `Done` unlocks dependents, and starting a locked task is refused.
 - **Tier** — `1 + max(tier of prerequisites)`. Computed by peeling settled nodes, not by recursion, so it terminates on any input.
 - **Queue** — the available frontier, most urgent first.
 - **`path_to_unlock`** — everything still standing between you and a locked task, in an order you can work through.
@@ -50,6 +51,7 @@ Every mutation is a `Command`. Applying one returns the commands that undo it, a
 ```text
 add <name> [in <direction>] [after a, b] [pri n] [due YYYY-MM-DD]
 done <task>   link <a> after <b>   due <task> <date | none>
+todo <task>   start <task>   review <task>   stage <task> <stage>
 ```
 
 ## License

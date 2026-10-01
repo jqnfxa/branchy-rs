@@ -2,12 +2,27 @@
 
 Branchy should feel like the skill tree of a video game, not like a list with indentation. The goal is to see at a glance what is done, what is unlocked and worth doing now, and what is still out of reach.
 
-## Two views over one graph
+## Views over one graph
 
 - **Tree view**: the full dependency graph, drawn on a pannable, zoomable canvas.
 - **Queue view**: a flat list of only the available items (prerequisites done, item not done), ordered by priority. It answers "what do I do next?" across every area at once.
+- **Calendar**: everything with a deadline, grouped by how soon it falls.
+- **Board**: every task in a column by its stage, BACKLOG | TODO | DOING | REVIEW | DONE.
 
-The queue is a projection of the graph, not a separate system. The tree is for planning and for seeing progress; the queue is what you open on an ordinary weekday.
+The queue is a projection of the graph, not a separate system. The tree is for planning and for seeing progress; the queue is what you open on an ordinary weekday; the board is where work in hand is tracked.
+
+## The board
+
+A kanban board, with one difference that is the point of the app: **the backlog is split into ready and locked.** A board that mixed the two would hide exactly what sets a dependency graph apart from a list.
+
+- A task's stage is stored; its status is still derived. A card in DOING whose prerequisite was reopened stays in DOING and says it is locked.
+- Only DONE unlocks what depends on a task. REVIEW means finished but unchecked, which is where an agent's work waits for a person, so it holds its dependents back. It can be skipped.
+- Starting a locked task is refused by the graph. Planning one into TODO is not, because planning ahead is legitimate.
+- Every column is ordered like the queue, deadline first and then priority, and the order comes from the core.
+- Moving a card: drag it, or pick its stage in the inspector. Dragging works with a pointer and a finger alike; on a touchscreen a card lifts after a short hold so a column can still be scrolled. While a locked card is carried, the columns that would refuse it are dimmed.
+- DONE and the backlog run to hundreds of tasks, so a column shows forty cards and offers the rest.
+
+Scrum was considered and left out: a sprint is a timebox, and a deadline on a milestone already pulls its whole chain into one.
 
 ## Node states
 

@@ -30,13 +30,17 @@ Probability theory is locked. 1 task(s) stand in the way:
 
 ## Commands
 
-`add` · `done` · `undone` · `rm` · `pri` · `due` · `rename` · `note` · `move` · `link` · `unlink` · `area` · `rename-area` · `recolor-area` · `rmarea` · `run`
+`add` · `done` · `undone` · `todo` · `start` · `review` · `stage` · `rm` · `pri` · `due` · `rename` · `note` · `move` · `link` · `unlink` · `area` · `rename-area` · `recolor-area` · `rmarea` · `run`
 
-`brief` · `queue` · `list` · `tree` · `why` · `show` · `calendar` · `cycles` · `snapshot` · `undo` · `where` · `guide`
+`brief` · `board` · `queue` · `list` · `tree` · `why` · `show` · `calendar` · `cycles` · `snapshot` · `undo` · `where` · `guide`
 
 `vault list` · `vault new` · `vault open` · `vault forget`
 
 `after` and `needs` both mean "blocked by"; `before` and `blocks` say the same edge from the other end. Tasks are named by id (`n12`) or by any unambiguous part of their name; an ambiguous one is refused with the candidates listed.
+
+## The board
+
+Every task also sits on a board: backlog, todo, doing, review, done. `todo`, `start` and `review` move a task along, `stage <task> <column>` moves it anywhere, and `branchy board` prints the columns, the backlog split into what could start now and what is still locked. Only done unlocks what depends on a task, and a locked task can be planned into todo but not started.
 
 ## For scripts and agents
 
@@ -50,8 +54,8 @@ Probability theory is locked. 1 task(s) stand in the way:
 $ branchy --plain queue
 # 1 available
 # a0	Hard skills
-# id	status	pri	area	tier	due	needs	name
-n1	available	6	a0	1	2027-03-01	n0	Calculus
+# id	status	stage	pri	area	tier	due	needs	name
+n1	available	backlog	6	a0	1	2027-03-01	n0	Calculus
 ```
 
 ## Vaults

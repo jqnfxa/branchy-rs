@@ -12,6 +12,7 @@ A dependency-aware, tree-alike TODO list. Break a goal into branches, unlock the
 - An item is **locked** until its prerequisites are done, **available** once they are, and **done** when finished.
 - A **deadline** on one item is inherited by everything it depends on, earliest wins. Date the goal and the whole chain leading to it is dated.
 - The **tree view** shows the whole graph like a game skill tree. The **queue view** lists only what is available, ordered by priority.
+- The **board** tracks work in hand: backlog, to do, doing, review, done. The backlog is split into what could start now and what is still locked, and only done unlocks what depends on a task.
 - One graph for everything: work features that block each other, hard skills, health, any long-term plan.
 
 Personal use first. PC first (Linux and Windows), mobile later.
@@ -51,6 +52,8 @@ cargo run --bin branchy -- due "Probability theory" 2027-03-01
 
 cargo run --bin branchy -- brief                     # where things stand
 cargo run --bin branchy -- queue                     # what is available now
+cargo run --bin branchy -- start calculus            # take it on
+cargo run --bin branchy -- board                     # backlog, todo, doing, review, done
 cargo run --bin branchy -- why "Probability theory"  # what stands in the way
 cargo run --bin branchy -- calendar                  # what is due, and when
 cargo run --bin branchy -- tree                      # the whole graph
@@ -69,7 +72,7 @@ A **vault** is a folder holding one graph, as in Obsidian, so separate jobs get 
 cd src-tauri && cargo build && ./target/debug/branchy-desktop
 ```
 
-It opens on your recent vaults, or straight into the last one if you tick the box. The same graph, drawn as a skill tree. Three layouts, a queue and a calendar, search, task and direction editing, and the same command line behind `:` or Ctrl+K — press `?` there for every command with an example. Windowed, borderless or full screen with F11. Five themes, and the interface in English, Russian, German, Polish or Japanese.
+It opens on your recent vaults, or straight into the last one if you tick the box. The same graph, drawn as a skill tree. Three layouts, a queue, a calendar and a board, search, task and direction editing, and the same command line behind `:` or Ctrl+K — press `?` there for every command with an example. Windowed, borderless or full screen with F11. Five themes, and the interface in English, Russian, German, Polish or Japanese.
 
 ## Stack
 

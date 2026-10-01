@@ -15,6 +15,8 @@ One dependency graph for everything (work features that block each other, hard s
 
 - A node has prerequisites, possibly in other areas, so it is a DAG and not a parent/child outline.
 - Status is derived, never stored: `Locked` (a prerequisite is not done), `Available` (all prerequisites done), `Done`, and `Cyclic` (on or downstream of a dependency cycle, so it can never become available).
+- **Stage is stored**, since 0.3.0: `backlog`, `todo`, `doing`, `review`, `done`, replacing the old `done` flag. Status and stage answer different questions: status says whether a task *can* be worked on, stage what is being done about it. `Done` status means the stage is `done`, and only that unlocks dependents; `review` does not. Starting a task (backlog or todo into doing or review) is refused while it is not available; planning it into todo and marking it done are not. Undo restores a stage through `RestoreStage`, which skips that check.
+- Board view shows the stages as columns, the backlog split into ready and locked, each column in queue order. `Graph::board` decides the columns and their order and the snapshot carries them, so the window only draws them.
 - Tier is `1 + max(prerequisite tiers)`, `0` when there are none. Computed by peeling settled nodes (Kahn), never by recursion, so it terminates on a cyclic graph too.
 - Tree view shows the graph. Queue view lists only `Available` nodes, deadline first and then priority, so the queue is a projection of the graph and not a separate system.
 - A deadline on one node is inherited by everything it depends on, earliest wins (`effective_due`). A date never changes a status, only urgency. With no dates anywhere the queue is pure priority order.
@@ -110,9 +112,9 @@ Invariants worth not breaking:
 
 `concept.md` is an untracked personal draft.
 
-## Release plan (agreed 2026-10-01)
+## Release plan (agreed 2026-10-01, all four built the same day)
 
-The maintainer asked for these in order, each its own tagged release:
+The maintainer asked for these in order, each its own tagged release. All four are committed and tagged locally; publishing and pushing are theirs.
 
 - **0.2.8**: id reuse and the broken-pipe panic fixed.
 - **0.2.9**: agent mode. `--plain`, `brief`, `--limit`, ids on every row, ambiguity errors listing candidates, `run -` batches with `$labels`, `branchy guide`. All additive.
