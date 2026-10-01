@@ -240,6 +240,18 @@ pub fn board(graph: &Graph, limit: usize) -> String {
     out
 }
 
+/// The tasks a search finds. See `render::matching` for the order.
+#[must_use]
+pub fn find(graph: &Graph, query: &str, notes: bool, limit: Option<usize>) -> String {
+    let all = crate::render::matching(graph, query, notes);
+    let total = all.len();
+    let ids = limited(all, limit);
+    let mut out = String::new();
+    count(&mut out, ids.len(), total, "matching");
+    table(&mut out, graph, &ids);
+    out
+}
+
 /// The available frontier, most urgent first.
 #[must_use]
 pub fn queue(graph: &Graph, limit: Option<usize>) -> String {

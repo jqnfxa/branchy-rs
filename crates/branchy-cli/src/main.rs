@@ -106,6 +106,18 @@ enum Cmd {
         #[arg(long, default_value_t = 10)]
         limit: usize,
     },
+    /// Tasks whose name holds some text, ignoring case: find <text>
+    Find {
+        /// What to look for
+        #[arg(required = true, num_args = 1..)]
+        text: Vec<String>,
+        /// Look in notes too, after the names
+        #[arg(long)]
+        notes: bool,
+        /// Only the first this many
+        #[arg(long)]
+        limit: Option<usize>,
+    },
     /// Everything available now, most urgent first
     Queue {
         /// Only the first this many
@@ -290,6 +302,7 @@ fn run(cli: &Cli) -> Result<String, String> {
         | Cmd::Queue { .. }
         | Cmd::List { .. }
         | Cmd::Board { .. }
+        | Cmd::Find { .. }
         | Cmd::Tree
         | Cmd::Why(_)
         | Cmd::Show(_)
@@ -337,6 +350,16 @@ fn view(command: &Cmd, graph: &Graph, plain: bool) -> Option<Result<String, Stri
         Cmd::Snapshot => serde_json::to_string_pretty(&snapshot::Snapshot::of(graph))
             .map(|json| format!("{json}\n"))
             .map_err(|e| e.to_string()),
+        Cmd::Find { text, notes, limit } => {
+            let query = text.join(" ");
+            if query.trim().is_empty() {
+                Err("give find something to look for".to_string())
+            } else if plain {
+                Ok(plain::find(graph, &query, *notes, *limit))
+            } else {
+                Ok(render::find(graph, &query, *notes, *limit))
+            }
+        }
         Cmd::Board { limit } if plain => Ok(plain::board(graph, *limit)),
         Cmd::Board { limit } => Ok(render::board(graph, *limit)),
         Cmd::List {

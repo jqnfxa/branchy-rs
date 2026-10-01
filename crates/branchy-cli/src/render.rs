@@ -239,6 +239,40 @@ fn card(out: &mut String, graph: &Graph, id: NodeId) {
     );
 }
 
+/// Tasks whose name holds `query`, ignoring case, and with `notes` also those
+/// whose note does. Name matches come first, each group in id order.
+#[must_use]
+pub fn matching(graph: &Graph, query: &str, notes: bool) -> Vec<NodeId> {
+    let wanted = query.to_lowercase();
+    let mut by_name = Vec::new();
+    let mut by_note = Vec::new();
+    for (id, node) in graph.nodes() {
+        if node.name.to_lowercase().contains(&wanted) {
+            by_name.push(id);
+        } else if notes && node.note.to_lowercase().contains(&wanted) {
+            by_note.push(id);
+        }
+    }
+    by_name.extend(by_note);
+    by_name
+}
+
+/// The tasks a search finds, as cards.
+#[must_use]
+pub fn find(graph: &Graph, query: &str, notes: bool, limit: Option<usize>) -> String {
+    let found = matching(graph, query, notes);
+    if found.is_empty() {
+        return format!("Nothing matches \"{query}\".\n");
+    }
+    let mut out = format!(
+        "{} task{} match \"{query}\":\n",
+        found.len(),
+        if found.len() == 1 { "" } else { "s" }
+    );
+    column(&mut out, graph, &found, limit, "matching");
+    out
+}
+
 /// How many tasks stand where.
 pub struct Counts {
     /// Every task.

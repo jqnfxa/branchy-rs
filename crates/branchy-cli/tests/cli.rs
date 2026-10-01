@@ -1165,3 +1165,39 @@ fn a_format_two_document_is_written_and_read_back() {
     assert!(text.contains(r#""version": 2"#), "{text}");
     assert!(run(&scratch, &["--plain", "show", "school"]).contains("\treview\t"));
 }
+
+// ── find ────────────────────────────────────────────────────────────────
+
+#[test]
+fn find_matches_names_ignoring_case() {
+    let scratch = seeded("find");
+    let plain = run(&scratch, &["--plain", "find", "ALGEBRA"]);
+    assert!(plain.starts_with("# 1 matching\n"), "{plain}");
+    assert!(plain.contains("\tSchool algebra\n"), "{plain}");
+    let human = run(&scratch, &["find", "theory"]);
+    assert!(human.contains("1 task match \"theory\""), "{human}");
+    assert!(human.contains("n2     Probability theory"), "{human}");
+}
+
+#[test]
+fn find_looks_in_notes_only_when_asked_and_lists_them_after_names() {
+    let scratch = seeded("find-notes");
+    run(&scratch, &["note", "probability", "Builds on calculus"]);
+    let names_only = run(&scratch, &["--plain", "find", "calculus"]);
+    assert!(names_only.starts_with("# 1 matching"), "{names_only}");
+    let with_notes = run(&scratch, &["--plain", "find", "calculus", "--notes"]);
+    assert!(with_notes.starts_with("# 2 matching"), "{with_notes}");
+    let calculus = with_notes.find("\tCalculus\n").expect("name match");
+    let probability = with_notes
+        .find("\tProbability theory\n")
+        .expect("note match");
+    assert!(calculus < probability, "{with_notes}");
+}
+
+#[test]
+fn find_says_how_much_a_limit_left_out() {
+    let scratch = seeded("find-limit");
+    let out = run(&scratch, &["--plain", "find", "a", "--limit", "1"]);
+    assert!(out.starts_with("# 1 of 3 matching"), "{out}");
+    assert!(run(&scratch, &["find", "nothing like it"]).contains("Nothing matches"));
+}

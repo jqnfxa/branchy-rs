@@ -41,6 +41,8 @@ $ branchy --plain rmarea Health               # only an empty direction
 $ branchy undo                                # takes back the last change
 
 Read
+$ branchy --plain find calculus               # tasks whose name holds the text
+$ branchy --plain find limits --notes --limit 5   # notes too, after the names
 $ branchy --plain queue --limit 10            # available now, most urgent first
 $ branchy --plain board --limit 5             # every column; backlog and done cut to 5
 $ branchy --plain list --stage doing          # what is being worked on
