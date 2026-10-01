@@ -173,6 +173,32 @@ fn an_ambiguous_name_is_refused() {
 }
 
 #[test]
+fn an_ambiguous_name_lists_what_it_matched_with_ids() {
+    let scratch = Scratch::new("ambiguous-list");
+    run(&scratch, &["area", "Hard skills", "#fff"]);
+    run(&scratch, &["add", "Calculus"]);
+    run(&scratch, &["add", "Calculus of variations"]);
+    let complaint = fails(&scratch, &["done", "calc"]);
+    assert!(complaint.contains("n0 Calculus"), "{complaint}");
+    assert!(
+        complaint.contains("n1 Calculus of variations"),
+        "{complaint}"
+    );
+}
+
+#[test]
+fn a_long_list_of_matches_is_cut_short() {
+    let scratch = Scratch::new("ambiguous-many");
+    run(&scratch, &["area", "Work"]);
+    for i in 0..12 {
+        run(&scratch, &["add", &format!("Task {i}")]);
+    }
+    let complaint = fails(&scratch, &["done", "task"]);
+    assert!(complaint.contains("12 tasks"), "{complaint}");
+    assert!(complaint.contains("and 4 more"), "{complaint}");
+}
+
+#[test]
 fn undo_reverses_the_last_change() {
     let scratch = seeded("undo");
     run(&scratch, &["done", "school"]);

@@ -6,7 +6,9 @@
 //! and turning a refusal into something a person can act on happened in each
 //! front end separately before; it lives here so they cannot drift apart.
 
-use branchy_core::{AreaId, Command, Error, Graph, Labels, NodeId};
+use std::fmt::Write as _;
+
+use branchy_core::{AreaId, Command, Error, Graph, Labels, NodeId, ParseError};
 
 /// Something a line created.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,7 +92,7 @@ pub fn apply_lines<S: AsRef<str>>(mut graph: Graph, lines: &[S]) -> Result<Edit,
             message,
         };
         let (label, command) = branchy_core::parse_labelled(&graph, line, &labels)
-            .map_err(|e| refuse(e.to_string()))?;
+            .map_err(|e| refuse(describe_parse(&graph, &e)))?;
         let creates = matches!(command, Command::AddNode { .. } | Command::AddArea { .. });
         let applied = graph
             .apply(command)
@@ -151,6 +153,57 @@ pub fn describe(graph: &Graph, error: &Error) -> String {
         ),
         other => other.to_string(),
     }
+}
+
+/// How many candidates an ambiguous reference lists before summarising.
+const CANDIDATES: usize = 8;
+
+/// A line that did not parse, in words.
+///
+/// An ambiguous reference lists what it matched, with ids. Saying only "matches
+/// three tasks" costs whoever typed it another look-up to find out which three,
+/// and an agent pays for that look-up in a whole extra call.
+#[must_use]
+pub fn describe_parse(graph: &Graph, error: &ParseError) -> String {
+    match error {
+        ParseError::AmbiguousTask { query, matches } => {
+            let listed: Vec<String> = matches
+                .iter()
+                .take(CANDIDATES)
+                .map(|id| format!("{id} {}", name(graph, *id)))
+                .collect();
+            candidates(
+                &format!("{query} matches {} tasks", matches.len()),
+                &listed,
+                matches.len(),
+            )
+        }
+        ParseError::AmbiguousArea { query, matches } => {
+            let listed: Vec<String> = matches
+                .iter()
+                .take(CANDIDATES)
+                .map(|id| {
+                    let named = graph.area(*id).map_or("?", |area| area.name.as_str());
+                    format!("{id} {named}")
+                })
+                .collect();
+            candidates(
+                &format!("{query} matches {} directions", matches.len()),
+                &listed,
+                matches.len(),
+            )
+        }
+        other => other.to_string(),
+    }
+}
+
+fn candidates(head: &str, listed: &[String], total: usize) -> String {
+    let mut out = format!("{head}: {}", listed.join("; "));
+    if total > listed.len() {
+        let _ = write!(out, "; and {} more", total - listed.len());
+    }
+    out.push_str(". Name one by its id.");
+    out
 }
 
 fn name(graph: &Graph, id: NodeId) -> String {
