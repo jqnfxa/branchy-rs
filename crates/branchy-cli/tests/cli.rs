@@ -1008,3 +1008,82 @@ fn brief_on_an_empty_graph_says_how_to_start() {
     let scratch = Scratch::new("brief-empty");
     assert!(run(&scratch, &["brief"]).contains("branchy area"));
 }
+
+// ── the guide ───────────────────────────────────────────────────────────
+
+/// Splits a command line the way a shell would for the guide's examples:
+/// on spaces, keeping double-quoted words together.
+fn shell_words(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut quoted = false;
+    let mut open = false;
+    for ch in line.chars() {
+        match ch {
+            '"' => {
+                open = !open;
+                quoted = true;
+            }
+            ' ' if !open => {
+                if !current.is_empty() || quoted {
+                    words.push(std::mem::take(&mut current));
+                    quoted = false;
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+    if !current.is_empty() || quoted {
+        words.push(current);
+    }
+    words
+}
+
+#[test]
+fn every_example_in_the_guide_runs() {
+    let scratch = Scratch::new("guide");
+    let guide = run(&scratch, &["guide"]);
+    let mut lines = guide.lines();
+    let mut ran = 0;
+    while let Some(line) = lines.next() {
+        let Some(command) = line.strip_prefix("$ branchy ") else {
+            continue;
+        };
+        // a comment after the command starts at two spaces and a #
+        let command = command.split("  #").next().unwrap_or("").trim();
+        if let Some(head) = command.strip_suffix("<<'EOF'") {
+            let batch: Vec<&str> = lines.by_ref().take_while(|l| *l != "EOF").collect();
+            let args = shell_words(head.trim());
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            let (ok, out, err) = run_with_input(&scratch, &args, &batch.join("\n"));
+            assert!(ok, "the guide's batch failed: {err}");
+            assert_eq!(
+                out, "a2\t$m\nn4\t$mech\nn5\n",
+                "the guide says what this prints"
+            );
+        } else {
+            let args = shell_words(command);
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            run(&scratch, &args);
+        }
+        ran += 1;
+    }
+    assert!(
+        ran > 25,
+        "only {ran} examples found; is the format still `$ branchy`?"
+    );
+}
+
+#[test]
+fn the_guide_needs_no_vault() {
+    let output = Command::new(binary())
+        .arg("guide")
+        .env(
+            "BRANCHY_VAULTS",
+            std::env::temp_dir().join("branchy-no-such-list.json"),
+        )
+        .env_remove("BRANCHY_FILE")
+        .output()
+        .expect("binary runs");
+    assert!(output.status.success());
+}

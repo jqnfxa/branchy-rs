@@ -17,6 +17,10 @@ use std::process::ExitCode;
 use branchy_core::{Graph, Status};
 use clap::{Parser, Subcommand};
 
+/// The page `branchy guide` prints. Every `$ branchy` line in it is run by
+/// the test suite, so it cannot advertise something the binary does not do.
+const GUIDE: &str = include_str!("guide.txt");
+
 /// Dependency-aware task tree.
 #[derive(Debug, Parser)]
 #[command(name = "branchy", version, about, long_about = None)]
@@ -86,6 +90,8 @@ enum Cmd {
     /// name what it creates, and later lines refer to it as `$x`.
     Run(Rest),
 
+    /// How to drive Branchy from a script or an agent, in one page
+    Guide,
     /// Where things stand, in one screen. The first thing to run.
     Brief {
         /// How many tasks to show from the queue, and from what is due soon
@@ -196,6 +202,9 @@ fn emit(output: &str) -> ExitCode {
 }
 
 fn run(cli: &Cli) -> Result<String, String> {
+    if let Cmd::Guide = &cli.command {
+        return Ok(GUIDE.to_string());
+    }
     if let Cmd::Vault { action } = &cli.command {
         return vault(action.clone().unwrap_or(VaultCmd::List)).map_err(|e| e.to_string());
     }
@@ -255,7 +264,8 @@ fn run(cli: &Cli) -> Result<String, String> {
         Cmd::RecolorArea(rest) => line("recolor-area", &rest.args),
         Cmd::Rmarea(rest) => line("rmarea", &rest.args),
         Cmd::Run(rest) => join(&rest.args),
-        Cmd::Brief { .. }
+        Cmd::Guide
+        | Cmd::Brief { .. }
         | Cmd::Queue { .. }
         | Cmd::List { .. }
         | Cmd::Tree

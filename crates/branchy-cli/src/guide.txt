@@ -1,0 +1,65 @@
+Branchy for agents and scripts
+
+A dependency graph of tasks. A task is available when every task it needs
+is done; the queue is the available tasks, most urgent first. Always pass
+--plain: one tab-separated line per task, whole names, ids instead of names.
+
+  branchy [--plain] [--vault NAME | --file PATH] <command>
+
+Without --vault or --file, commands work in the vault opened last.
+
+Orient first
+$ branchy --plain brief                       # counts, directions, top of the queue, due soon
+
+Change. Each prints the row it changed. Refer to tasks by id (n12); an
+unambiguous part of a name also works, and an ambiguous one is refused with
+the candidates listed. Ids are never reused.
+$ branchy --plain area "Hard skills" "#4fd1c5"
+$ branchy --plain add "School algebra" in "Hard skills" pri 3
+$ branchy --plain add Calculus after n0 pri 6 due 2026-12-31 note "Limits first"
+$ branchy --plain add "Probability theory" after n1
+$ branchy --plain add Scratch before n2       # before: n2 needs the new task
+$ branchy --plain unlink n2 after n3          # n2 no longer needs n3
+$ branchy --plain link n2 after n0            # n2 needs n0
+$ branchy --plain done n0                     # undone n0 reverses it
+$ branchy --plain pri n1 8                    # 0-255, higher is more urgent
+$ branchy --plain due n1 2026-11-30           # due n1 none clears it
+$ branchy --plain rename n1 "Calculus I"
+$ branchy --plain note n1 "Limits, then series"
+$ branchy --plain area Health
+$ branchy --plain move n3 in Health
+$ branchy --plain rm n3                       # strips it from whatever needed it
+$ branchy --plain rename-area a0 Maths
+$ branchy --plain recolor-area a0 "#eab64d"
+$ branchy --plain rmarea Health               # only an empty direction
+$ branchy undo                                # takes back the last change
+
+Read
+$ branchy --plain queue --limit 10            # available now, most urgent first
+$ branchy --plain list --status locked --limit 20
+$ branchy --plain tree                        # every task, by direction and tier
+$ branchy --plain show n2                     # one task, what it unlocks, its note
+$ branchy --plain why n2                      # what has to be done first, in order
+$ branchy --plain calendar --limit 10         # deadlines, soonest first
+$ branchy cycles                              # loops, and the unlink that breaks each
+
+Rows: id status pri area tier due needs name
+  status  available | locked (a prerequisite is not done) | done | cyclic
+  tier    1 + the highest tier among its prerequisites, 0 with none
+  due     the deadline it works to, inherited from what it unblocks, or -
+  needs   prerequisite ids, comma-separated, or -
+A line starting with # is a legend (a0 and its name) or a count.
+
+Many changes: one call, all or nothing, one undo step. $x = names what a
+line creates; later lines use $x where a task or direction goes.
+$ branchy --plain run - <<'EOF'
+# lines starting with # are comments
+$m = area Physics
+$mech = add Mechanics in $m pri 7
+add Optics in $m after $mech
+EOF
+A refused line is reported by number and nothing is applied. On success
+it prints what was created: a2 $m, then n4 $mech, then n5.
+
+Avoid reading graph.json directly, and avoid snapshot: it carries every
+note and is meant for user interfaces.
