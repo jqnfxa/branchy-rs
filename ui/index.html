@@ -37,6 +37,7 @@
     <span class="seg">
       <button id="queueBtn" aria-pressed="false"></button>
       <button id="calBtn" aria-pressed="false"></button>
+      <button id="boardBtn" aria-pressed="false"></button>
     </span>
     <div class="tally" id="tally"></div>
     <button class="iconbtn" id="setBtn" aria-label="Settings">
@@ -88,6 +89,19 @@
         <button id="zFit" aria-label="Fit">&#10530;</button>
         <div class="lvl" id="zLvl">100%</div>
       </div>
+
+      <!-- Over the whole stage rather than beside it: five columns need the
+           width, and on a phone they scroll sideways. -->
+      <section class="board" id="board" hidden aria-labelledby="bTitle">
+        <div class="bhead">
+          <div>
+            <h2 id="bTitle"></h2>
+            <p id="bBlurb"></p>
+          </div>
+          <button class="xbtn" id="bClose" aria-label="Close">&times;</button>
+        </div>
+        <div class="bcols" id="bcols"></div>
+      </section>
 
       <aside class="queue" id="calendar" hidden>
         <div class="qhead">

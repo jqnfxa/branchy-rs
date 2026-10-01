@@ -479,6 +479,80 @@ body.dense .labels .label.culled{display:none}
 .qlist .sub{font-size:11px;color:var(--text-dim)}
 .qlist .tag{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--c)}
 
+/* ---------- board ---------- */
+/* Over the whole stage: five columns need the width. On a narrow screen the
+   columns keep a readable width and the row scrolls sideways instead. */
+.board{
+  position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;
+  background:color-mix(in srgb,var(--bg) 97%,transparent);backdrop-filter:blur(10px);
+  padding:14px 16px 16px;cursor:default;
+}
+.board[hidden]{display:none}
+.bhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.bhead h2{
+  font-family:var(--body);font-size:10.5px;font-weight:700;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px;
+}
+.bhead p{font-size:12px;color:var(--text-dim);margin:0;max-width:72ch}
+.bcols{
+  flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,minmax(180px,1fr));gap:12px;
+  overflow-x:auto;touch-action:pan-x pan-y;scroll-snap-type:x proximity;
+}
+.bcol{
+  display:flex;flex-direction:column;min-height:0;scroll-snap-align:start;
+  background:var(--bg-sunken);border:1px solid var(--line-soft);border-radius:12px;
+  transition:border-color .15s ease,opacity .15s ease;
+}
+.bcol h3,.bsec h4{
+  display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  font-family:var(--body);font-weight:700;text-transform:uppercase;color:var(--text-dim);
+}
+.bcol h3{font-size:10.5px;letter-spacing:.11em;margin:0;padding:11px 12px 8px}
+.bsec h4{font-size:10px;letter-spacing:.09em;margin:2px 4px 6px;opacity:.85}
+.bcol h3 span,.bsec h4 span{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:0}
+.bbody{flex:1;min-height:0;overflow-y:auto;padding:0 8px 10px;touch-action:pan-x pan-y}
+.bsec + .bsec{margin-top:14px}
+.cards{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+/* a card, also when it is carried as a ghost outside any list */
+.card{
+  --c:var(--a-hard);list-style:none;min-height:44px;box-sizing:border-box;
+  padding:9px 10px;background:var(--bg-card);border:1px solid var(--line-soft);
+  border-inline-start:3px solid var(--c);border-radius:8px;cursor:grab;
+  -webkit-user-select:none;user-select:none;
+}
+.card:hover{border-color:var(--line);border-inline-start-color:var(--c)}
+.card .nm{font-size:13px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.card .sub{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:5px;font-size:10.5px;color:var(--text-dim)}
+.card .tag{font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--c)}
+.card .pri{font-family:var(--mono)}
+.card .lock{color:var(--danger);font-weight:700}
+.card.locked .nm,.card.cyclic .nm{color:var(--text-dim)}
+.card.done{opacity:.72}
+.cards .empty{
+  font-size:12px;color:var(--text-dim);text-align:center;
+  border:1px dashed var(--line-soft);border-radius:8px;padding:10px;
+}
+.bsec .more{
+  display:block;width:100%;margin-top:6px;padding:9px;cursor:pointer;
+  font:inherit;font-size:12px;font-weight:600;color:var(--text-dim);
+  background:transparent;border:1px dashed var(--line);border-radius:8px;
+}
+.bsec .more:hover{color:var(--text)}
+/* while a card is carried */
+.board.dragging .bcol.over{border-color:var(--a-hard)}
+.board.dragging .bcol.refuse{opacity:.45}
+.card.dragging{opacity:.35}
+.card.lifted{box-shadow:0 0 0 2px var(--c)}
+.card.ghost{
+  position:fixed;left:0;top:0;z-index:30;pointer-events:none;cursor:grabbing;
+  box-shadow:0 14px 34px var(--shadow);opacity:.95;
+}
+/* the same moves, as buttons in the inspector */
+.stages{margin-bottom:16px}
+.stages .choices{gap:4px}
+.stages .choices button{padding:7px 6px;font-size:11.5px;min-height:34px}
+.stages .choices button.refuse{opacity:.45}
+
 /* ---------- settings ---------- */
 dialog.settings{
   border:1px solid var(--line);border-radius:14px;padding:0;
@@ -605,6 +679,8 @@ body[data-skin="light"] .palette{background:rgba(120,128,160,.34)}
     width:min(326px,88vw);z-index:7;box-shadow:0 0 40px var(--shadow);
   }
   .queue{width:min(326px,88vw)}
+  .board{padding:12px}
+  .bcols{grid-template-columns:repeat(5,minmax(min(280px,82vw),1fr))}
   .brand small{display:none}
   .footer{display:none}
 }

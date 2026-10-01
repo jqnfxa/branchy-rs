@@ -39,6 +39,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 3,
       "done": true,
+      "stage": "done",
       "prereqs": [],
       "dependents": [
         "n1",
@@ -48,7 +49,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 0,
       "due": null,
       "effective_due": "2026-12-31",
-      "days_left": 102,
+      "days_left": 91,
       "urgency": "later"
     },
     {
@@ -58,6 +59,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 5,
       "done": true,
+      "stage": "done",
       "prereqs": [
         "n0"
       ],
@@ -68,7 +70,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 1,
       "due": null,
       "effective_due": "2026-12-31",
-      "days_left": 102,
+      "days_left": 91,
       "urgency": "later"
     },
     {
@@ -78,6 +80,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 6,
       "done": true,
+      "stage": "done",
       "prereqs": [
         "n0"
       ],
@@ -88,7 +91,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 1,
       "due": null,
       "effective_due": "2026-12-31",
-      "days_left": 102,
+      "days_left": 91,
       "urgency": "later"
     },
     {
@@ -98,6 +101,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 7,
       "done": false,
+      "stage": "todo",
       "prereqs": [
         "n1",
         "n2"
@@ -109,7 +113,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 2,
       "due": null,
       "effective_due": "2026-12-31",
-      "days_left": 102,
+      "days_left": 91,
       "urgency": "later"
     },
     {
@@ -119,6 +123,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 2,
       "done": true,
+      "stage": "done",
       "prereqs": [],
       "dependents": [
         "n5",
@@ -128,7 +133,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 0,
       "due": null,
       "effective_due": "2026-09-18",
-      "days_left": -2,
+      "days_left": -13,
       "urgency": "overdue"
     },
     {
@@ -138,6 +143,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 5,
       "done": true,
+      "stage": "done",
       "prereqs": [
         "n4"
       ],
@@ -149,7 +155,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 1,
       "due": null,
       "effective_due": "2026-09-18",
-      "days_left": -2,
+      "days_left": -13,
       "urgency": "overdue"
     },
     {
@@ -159,6 +165,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 9,
       "done": false,
+      "stage": "doing",
       "prereqs": [
         "n5"
       ],
@@ -169,7 +176,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 2,
       "due": "2026-09-18",
       "effective_due": "2026-09-18",
-      "days_left": -2,
+      "days_left": -13,
       "urgency": "overdue"
     },
     {
@@ -179,6 +186,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 6,
       "done": false,
+      "stage": "review",
       "prereqs": [
         "n5"
       ],
@@ -189,7 +197,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 2,
       "due": null,
       "effective_due": "2026-12-31",
-      "days_left": 102,
+      "days_left": 91,
       "urgency": "later"
     },
     {
@@ -199,6 +207,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 2,
       "done": true,
+      "stage": "done",
       "prereqs": [],
       "dependents": [
         "n9"
@@ -217,6 +226,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a0",
       "priority": 5,
       "done": false,
+      "stage": "backlog",
       "prereqs": [
         "n8"
       ],
@@ -235,6 +245,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a1",
       "priority": 6,
       "done": false,
+      "stage": "backlog",
       "prereqs": [
         "n4"
       ],
@@ -255,6 +266,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a1",
       "priority": 10,
       "done": false,
+      "stage": "todo",
       "prereqs": [
         "n3",
         "n6",
@@ -267,7 +279,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 3,
       "due": "2026-12-31",
       "effective_due": "2026-12-31",
-      "days_left": 102,
+      "days_left": 91,
       "urgency": "later"
     },
     {
@@ -277,6 +289,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a2",
       "priority": 1,
       "done": true,
+      "stage": "done",
       "prereqs": [],
       "dependents": [
         "n15"
@@ -285,7 +298,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 0,
       "due": null,
       "effective_due": "2027-06-01",
-      "days_left": 254,
+      "days_left": 243,
       "urgency": "later"
     },
     {
@@ -295,6 +308,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a2",
       "priority": 8,
       "done": true,
+      "stage": "done",
       "prereqs": [],
       "dependents": [
         "n16"
@@ -303,7 +317,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 0,
       "due": null,
       "effective_due": "2027-06-01",
-      "days_left": 254,
+      "days_left": 243,
       "urgency": "later"
     },
     {
@@ -313,6 +327,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a2",
       "priority": 7,
       "done": false,
+      "stage": "backlog",
       "prereqs": [],
       "dependents": [
         "n15"
@@ -321,7 +336,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 0,
       "due": null,
       "effective_due": "2027-06-01",
-      "days_left": 254,
+      "days_left": 243,
       "urgency": "later"
     },
     {
@@ -331,6 +346,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a2",
       "priority": 5,
       "done": false,
+      "stage": "backlog",
       "prereqs": [
         "n12",
         "n14"
@@ -342,7 +358,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 1,
       "due": null,
       "effective_due": "2027-06-01",
-      "days_left": 254,
+      "days_left": 243,
       "urgency": "later"
     },
     {
@@ -352,6 +368,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a2",
       "priority": 3,
       "done": false,
+      "stage": "backlog",
       "prereqs": [
         "n13",
         "n15"
@@ -361,7 +378,7 @@ window.BRANCHY_FIXTURE = {
       "tier": 2,
       "due": "2027-06-01",
       "effective_due": "2027-06-01",
-      "days_left": 254,
+      "days_left": 243,
       "urgency": "later"
     },
     {
@@ -371,6 +388,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a3",
       "priority": 6,
       "done": true,
+      "stage": "done",
       "prereqs": [],
       "dependents": [
         "n18",
@@ -390,6 +408,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a3",
       "priority": 8,
       "done": false,
+      "stage": "backlog",
       "prereqs": [
         "n10",
         "n17"
@@ -411,6 +430,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a3",
       "priority": 4,
       "done": false,
+      "stage": "backlog",
       "prereqs": [
         "n17"
       ],
@@ -429,6 +449,7 @@ window.BRANCHY_FIXTURE = {
       "area": "a1",
       "priority": 10,
       "done": false,
+      "stage": "backlog",
       "prereqs": [
         "n11",
         "n18"
@@ -452,12 +473,47 @@ window.BRANCHY_FIXTURE = {
     "n19"
   ],
   "cycles": [],
+  "board": {
+    "backlog_ready": [
+      "n14",
+      "n10",
+      "n9",
+      "n19"
+    ],
+    "backlog_locked": [
+      "n15",
+      "n16",
+      "n20",
+      "n18"
+    ],
+    "todo": [
+      "n11",
+      "n3"
+    ],
+    "doing": [
+      "n6"
+    ],
+    "review": [
+      "n7"
+    ],
+    "done": [
+      "n5",
+      "n4",
+      "n2",
+      "n1",
+      "n0",
+      "n13",
+      "n12",
+      "n17",
+      "n8"
+    ]
+  },
   "tally": {
     "total": 21,
     "done": 9,
     "available": 7,
     "overdue": 1
   },
-  "today": "2026-09-20"
+  "today": "2026-10-01"
 }
 ;

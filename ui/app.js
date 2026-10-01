@@ -44,6 +44,11 @@
       e: 'add "Calculus" in hard after school pri 6 due 2027-03-01' },
     { k: "done", s: "done <task>", e: "done calculus" },
     { k: "undone", s: "undone <task>", e: "undone calculus" },
+    { k: "todo", s: "todo <task>", e: "todo calculus" },
+    { k: "start", s: "start <task>", e: "start calculus" },
+    { k: "review", s: "review <task>", e: "review calculus" },
+    { k: "stage", s: "stage <task> <backlog | todo | doing | review | done>",
+      e: "stage calculus doing" },
     { k: "link", s: "link <a> after <b>   ·   link <a> before <b>",
       e: "link probability after calculus" },
     { k: "unlink", s: "unlink <a> after <b>", e: "unlink probability after calculus" },
@@ -64,7 +69,8 @@
   // places them, keeps them on screen and reads them out.
   var HINTS = {
     dockToggle: "h.dock", vaultBtn: "h.vault", q: "h.search", rxBtn: "h.regex",
-    newBtn: "h.new", queueBtn: "h.queue", calBtn: "h.calendar", setBtn: "h.settings",
+    newBtn: "h.new", queueBtn: "h.queue", calBtn: "h.calendar", boardBtn: "h.board",
+    setBtn: "h.settings",
     tally: "h.tally", zIn: "h.zoomIn", zOut: "h.zoomOut", zFit: "h.fit",
     manageAreas: "h.areas", allBtn: "h.all", palHelp: "h.help",
   };
@@ -297,7 +303,9 @@
   // Runs a command line, then redraws from whatever the backend now holds.
   // Nothing is assumed about the outcome: the graph is the authority, so the
   // interface asks it again rather than guessing.
-  function execute(line) {
+  // `quiet` leaves the selection alone: a card dragged across the board should
+  // not open the inspector and fly the camera every time it lands.
+  function execute(line, quiet) {
     var before = {};
     snap.nodes.forEach(function (node) {
       before[node.id] = node.status;
@@ -310,7 +318,7 @@
         render();
         paintChrome();
         celebrate(before);
-        if (outcome.node && byId[outcome.node]) select(outcome.node);
+        if (outcome.node && byId[outcome.node] && !quiet) select(outcome.node);
         return true;
       })
       .catch(function (error) {
@@ -734,7 +742,7 @@
   function wirePanZoom() {
     var drag = null;
     stage.addEventListener("pointerdown", function (ev) {
-      if (ev.target.closest(".zoom, .queue")) return;
+      if (ev.target.closest(".zoom, .queue, .board")) return;
       if (animation) cancelAnimationFrame(animation);
       drag = { x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y, moved: false };
       stage.classList.add("grabbing");
@@ -767,7 +775,7 @@
       "wheel",
       function (ev) {
         // the panels over the stage scroll; only the canvas zooms
-        if (ev.target.closest(".queue")) return;
+        if (ev.target.closest(".queue, .board")) return;
         ev.preventDefault();
         zoomAt(ev.clientX - stageBox.left, ev.clientY - stageBox.top, Math.exp(-ev.deltaY * 0.0016));
       },
@@ -777,7 +785,7 @@
     // two fingers on a touchscreen: Android is a target, so this is not optional
     var pinch = null;
     stage.addEventListener("touchstart", function (ev) {
-      if (ev.target.closest(".queue")) return;
+      if (ev.target.closest(".queue, .board")) return;
       if (ev.touches.length === 2) {
         pinch = spread(ev.touches);
         if (animation) cancelAnimationFrame(animation);
@@ -956,6 +964,8 @@
     var badge = dueBadge(node);
     if (badge) meta.appendChild(badge);
     body.appendChild(meta);
+
+    body.appendChild(stagePicker(node));
 
     if (node.note) {
       var note = document.createElement("p");
@@ -1161,7 +1171,295 @@
     if (show) {
       queueEl.hidden = true;
       queueBtn.setAttribute("aria-pressed", "false");
+      boardEl.hidden = true;
+      boardBtn.setAttribute("aria-pressed", "false");
       paintCalendar();
+    }
+  }
+
+  /* ---------- the board ---------- */
+
+  var boardEl, boardBtn;
+  var STAGES = ["backlog", "todo", "doing", "review", "done"];
+  // How many cards a long column shows before "show more". A backlog of five
+  // hundred would otherwise be five hundred elements nobody scrolls down to.
+  var BOARD_PAGE = 40;
+  // Sections whose "show more" was pressed, kept until the board closes.
+  var boardOpen = {};
+  var boardDrag = null;
+  var swallowClick = false;
+
+  function paintBoard() {
+    var host = document.getElementById("bcols");
+    var scroll = {};
+    Array.prototype.forEach.call(host.querySelectorAll(".bbody"), function (body) {
+      scroll[body.parentNode.dataset.stage] = body.scrollTop;
+    });
+    host.innerHTML = "";
+    var board = snap.board || {
+      backlog_ready: [], backlog_locked: [], todo: [], doing: [], review: [], done: [],
+    };
+    STAGES.forEach(function (stage) {
+      var column = document.createElement("div");
+      column.className = "bcol";
+      column.dataset.stage = stage;
+
+      var head = document.createElement("h3");
+      head.textContent = t("b." + stage);
+      var count = document.createElement("span");
+      count.textContent = num(stage === "backlog"
+        ? board.backlog_ready.length + board.backlog_locked.length
+        : board[stage].length);
+      head.appendChild(count);
+      column.appendChild(head);
+
+      var body = document.createElement("div");
+      body.className = "bbody";
+      if (stage === "backlog") {
+        // the split the board must not hide: what could start now, and what waits
+        body.appendChild(boardSection("ready", t("b.ready"), board.backlog_ready));
+        body.appendChild(boardSection("locked", t("b.locked"), board.backlog_locked));
+      } else {
+        body.appendChild(boardSection(stage, null, board[stage]));
+      }
+      column.appendChild(body);
+      host.appendChild(column);
+      // a redraw after a move should not throw the column back to the top
+      if (scroll[stage]) body.scrollTop = scroll[stage];
+    });
+  }
+
+  function boardSection(key, heading, ids) {
+    var wrap = document.createElement("div");
+    wrap.className = "bsec";
+    if (heading) {
+      var title = document.createElement("h4");
+      title.textContent = heading;
+      var count = document.createElement("span");
+      count.textContent = num(ids.length);
+      title.appendChild(count);
+      wrap.appendChild(title);
+    }
+    var list = document.createElement("ul");
+    list.className = "cards";
+    var shown = boardOpen[key] ? ids : ids.slice(0, BOARD_PAGE);
+    shown.forEach(function (id) {
+      if (byId[id]) list.appendChild(boardCard(byId[id]));
+    });
+    if (!ids.length) {
+      var none = document.createElement("li");
+      none.className = "empty";
+      none.textContent = t("b.empty");
+      list.appendChild(none);
+    }
+    wrap.appendChild(list);
+    if (shown.length < ids.length) {
+      var more = document.createElement("button");
+      more.type = "button";
+      more.className = "more";
+      more.textContent = t("b.more", { n: ids.length - shown.length });
+      more.onclick = function () {
+        boardOpen[key] = true;
+        paintBoard();
+      };
+      wrap.appendChild(more);
+    }
+    return wrap;
+  }
+
+  function boardCard(node) {
+    var card = document.createElement("li");
+    card.className = "card " + node.status;
+    card.dataset.id = node.id;
+    card.style.setProperty("--c", colorOf(node.area));
+
+    var name = document.createElement("div");
+    name.className = "nm";
+    name.textContent = node.name;
+    card.appendChild(name);
+
+    var sub = document.createElement("div");
+    sub.className = "sub";
+    var area = areaById[node.area];
+    var tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = area ? area.name.split(" ")[0] : "";
+    sub.appendChild(tag);
+    var priority = document.createElement("span");
+    priority.className = "pri";
+    priority.textContent = "p" + num(node.priority);
+    sub.appendChild(priority);
+    if (node.status === "locked" || node.status === "cyclic") {
+      // past the backlog this is news: something it needs was reopened
+      var lock = document.createElement("span");
+      lock.className = "lock";
+      lock.textContent = t("st." + node.status);
+      sub.appendChild(lock);
+    }
+    var badge = dueBadge(node);
+    if (badge && node.stage !== "done") sub.appendChild(badge);
+    card.appendChild(sub);
+
+    card.addEventListener("pointerdown", startCardDrag);
+    card.addEventListener("click", function () {
+      if (swallowClick) return;
+      if (!isShown(node.id)) {
+        state.focus = null;
+        state.visible[node.area] = true;
+        paintAreas();
+        render();
+      }
+      select(node.id);
+    });
+    return card;
+  }
+
+  // Moving a card. Pointer events, so a mouse and a finger take one path. A
+  // finger has to hold still for a moment first, or every attempt to scroll a
+  // column would pick a card up instead. No pointer capture is taken: WebKit
+  // sends the click to whatever holds it, which once stopped clicks on the
+  // canvas from ever reaching a node.
+  function startCardDrag(ev) {
+    if (ev.button !== 0) return;
+    var card = ev.currentTarget;
+    var touch = ev.pointerType === "touch";
+    boardDrag = {
+      id: card.dataset.id, card: card, x: ev.clientX, y: ev.clientY,
+      armed: !touch, live: false, ghost: null, timer: null, dx: 0, dy: 0,
+    };
+    if (touch) {
+      boardDrag.timer = setTimeout(function () {
+        if (!boardDrag) return;
+        boardDrag.armed = true;
+        card.classList.add("lifted");
+      }, 350);
+    }
+    document.addEventListener("pointermove", moveCardDrag);
+    document.addEventListener("pointerup", endCardDrag);
+    document.addEventListener("pointercancel", dropCardDrag);
+  }
+
+  function moveCardDrag(ev) {
+    var drag = boardDrag;
+    if (!drag) return;
+    var dist = Math.abs(ev.clientX - drag.x) + Math.abs(ev.clientY - drag.y);
+    if (!drag.live) {
+      // a finger that moves before the hold is scrolling, not dragging
+      if (!drag.armed) {
+        if (dist > 8) dropCardDrag();
+        return;
+      }
+      if (dist < 6) return;
+      drag.live = true;
+      // read once, as the drag starts, not on every move
+      var box = drag.card.getBoundingClientRect();
+      drag.dx = drag.x - box.left;
+      drag.dy = drag.y - box.top;
+      drag.ghost = drag.card.cloneNode(true);
+      drag.ghost.classList.add("ghost");
+      drag.ghost.style.width = box.width + "px";
+      document.body.appendChild(drag.ghost);
+      drag.card.classList.add("dragging");
+      boardEl.classList.add("dragging");
+      var node = byId[drag.id];
+      Array.prototype.forEach.call(boardEl.querySelectorAll(".bcol"), function (column) {
+        var stage = column.dataset.stage;
+        column.classList.toggle("home", !!node && node.stage === stage);
+        column.classList.toggle("refuse", !!node && wouldRefuse(node, stage));
+      });
+    }
+    ev.preventDefault();
+    drag.ghost.style.transform =
+      "translate(" + (ev.clientX - drag.dx) + "px," + (ev.clientY - drag.dy) + "px)";
+    var over = columnAt(ev.clientX, ev.clientY);
+    Array.prototype.forEach.call(boardEl.querySelectorAll(".bcol"), function (column) {
+      column.classList.toggle("over", column === over);
+    });
+  }
+
+  function endCardDrag(ev) {
+    var drag = boardDrag;
+    var moved = !!drag && drag.live;
+    var over = moved ? columnAt(ev.clientX, ev.clientY) : null;
+    dropCardDrag();
+    if (!moved) return;
+    // the click that follows this release ends a drag; it is not a tap
+    swallowClick = true;
+    setTimeout(function () { swallowClick = false; }, 0);
+    var node = byId[drag.id];
+    if (!over || !node || over.dataset.stage === node.stage) return;
+    execute("stage " + node.id + " " + over.dataset.stage, true);
+  }
+
+  function dropCardDrag() {
+    var drag = boardDrag;
+    boardDrag = null;
+    document.removeEventListener("pointermove", moveCardDrag);
+    document.removeEventListener("pointerup", endCardDrag);
+    document.removeEventListener("pointercancel", dropCardDrag);
+    if (!drag) return;
+    clearTimeout(drag.timer);
+    drag.card.classList.remove("lifted", "dragging");
+    if (drag.ghost) drag.ghost.remove();
+    boardEl.classList.remove("dragging");
+    Array.prototype.forEach.call(boardEl.querySelectorAll(".bcol"), function (column) {
+      column.classList.remove("home", "refuse", "over");
+    });
+  }
+
+  function columnAt(x, y) {
+    var hit = document.elementFromPoint(x, y);
+    return hit ? hit.closest(".bcol") : null;
+  }
+
+  // Where the task stands on the board, and a tap to move it: the way to move
+  // a card on a touchscreen, where dragging competes with scrolling.
+  function stagePicker(node) {
+    var wrap = document.createElement("div");
+    wrap.className = "stages";
+    var heading = document.createElement("h4");
+    heading.textContent = t("b.stage");
+    wrap.appendChild(heading);
+    var row = document.createElement("div");
+    row.className = "choices";
+    STAGES.forEach(function (stage) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.textContent = t("b." + stage);
+      button.setAttribute("aria-pressed", String(node.stage === stage));
+      // Greyed, not disabled: pressing it still asks the graph, which says
+      // why it cannot be started. A disabled button would explain nothing.
+      if (wouldRefuse(node, stage)) button.classList.add("refuse");
+      button.onclick = function () {
+        if (node.stage !== stage) execute("stage " + node.id + " " + stage, true);
+      };
+      row.appendChild(button);
+    });
+    wrap.appendChild(row);
+    return wrap;
+  }
+
+  // Whether the graph would refuse this move: starting a task that is not
+  // available. Only for drawing a column or a button dimmed; the graph is
+  // still asked, and its answer is the one shown.
+  function wouldRefuse(node, stage) {
+    var starting = (stage === "doing" || stage === "review") &&
+      (node.stage === "backlog" || node.stage === "todo");
+    return starting && node.status !== "available";
+  }
+
+  function toggleBoard(on) {
+    var show = on === undefined ? boardEl.hidden : on;
+    boardEl.hidden = !show;
+    boardBtn.setAttribute("aria-pressed", String(show));
+    if (show) {
+      queueEl.hidden = true;
+      queueBtn.setAttribute("aria-pressed", "false");
+      calendarEl.hidden = true;
+      calBtn.setAttribute("aria-pressed", "false");
+      paintBoard();
+    } else {
+      boardOpen = {};
     }
   }
 
@@ -1325,6 +1623,7 @@
 
     var hints = [
       ["new", "N"], ["ed.editTitle", "E"], ["ar.title", "A"], ["k.calendar", "C"],
+      ["k.board", "B"],
       ["k.command", ":"], ["k.search", "/"], ["k.fit", "F"],
       ["k.queue", "Q"], ["k.layouts", "1 2 3"], ["k.settings", "S"],
       ["k.window", "F11"], ["k.close", "Esc"],
@@ -1371,6 +1670,9 @@
     document.getElementById("edDueHelp").textContent = t("ed.dueHelp");
     document.getElementById("edNeedsLbl").textContent = t("ed.needs");
     calBtn.textContent = t("cal.open");
+    boardBtn.textContent = t("board");
+    document.getElementById("bTitle").textContent = t("b.title");
+    document.getElementById("bBlurb").textContent = t("b.blurb");
     document.getElementById("calTitle").textContent = t("cal.title");
     document.getElementById("calBlurb").textContent = t("cal.blurb");
     document.getElementById("edNeedsHelp").textContent = t("ed.needsHelp");
@@ -1391,6 +1693,7 @@
     paintAreas();
     paintQueue();
     if (!calendarEl.hidden) paintCalendar();
+    if (!boardEl.hidden) paintBoard();
     if (state.selected) drawInspector(byId[state.selected]);
   }
 
@@ -2351,6 +2654,8 @@
     queueEl = document.getElementById("queue");
     calendarEl = document.getElementById("calendar");
     calBtn = document.getElementById("calBtn");
+    boardEl = document.getElementById("board");
+    boardBtn = document.getElementById("boardBtn");
     queueBtn = document.getElementById("queueBtn");
     qInput = document.getElementById("q");
     searchWrap = document.getElementById("searchWrap");
@@ -2391,6 +2696,10 @@
     calBtn.addEventListener("click", function () { toggleCalendar(); });
     document.getElementById("calClose").addEventListener("click", function () {
       toggleCalendar(false);
+    });
+    boardBtn.addEventListener("click", function () { toggleBoard(); });
+    document.getElementById("bClose").addEventListener("click", function () {
+      toggleBoard(false);
     });
     document.getElementById("allBtn").addEventListener("click", function () {
       state.focus = null;
@@ -2474,6 +2783,8 @@
     if (show) {
       calendarEl.hidden = true;
       calBtn.setAttribute("aria-pressed", "false");
+      boardEl.hidden = true;
+      boardBtn.setAttribute("aria-pressed", "false");
       paintQueue();
     }
   }
@@ -2502,6 +2813,7 @@
       if (typing) { qInput.value = ""; state.query = ""; updateEmphasis(); qInput.blur(); }
       else if (!queueEl.hidden) toggleQueue(false);
       else if (!calendarEl.hidden) toggleCalendar(false);
+      else if (!boardEl.hidden) toggleBoard(false);
       else if (state.winMode !== "windowed") showWindowAs("windowed");
       else select(null);
       return;
@@ -2519,6 +2831,7 @@
     else if (key === "f") fit();
     else if (key === "q") toggleQueue();
     else if (key === "c") toggleCalendar();
+    else if (key === "b") toggleBoard();
     else if (key === "u") undo();
     else if (key === "s") { paintSettings(); dlg.showModal(); }
     else if (key === "1" || key === "2" || key === "3") {
