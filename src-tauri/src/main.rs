@@ -44,10 +44,17 @@ impl Session {
         self.path.parent().unwrap_or(Path::new("."))
     }
 
-    fn load(&self) -> Result<Graph, String> {
+    /// A vault whose folder has gone is reported, never quietly recreated,
+    /// which reading, saving and even taking the lock would all do.
+    fn check(&self) -> Result<(), String> {
         if self.vault && !self.dir().is_dir() {
             return Err(StoreError::VaultMissing(self.dir().to_path_buf()).to_string());
         }
+        Ok(())
+    }
+
+    fn load(&self) -> Result<Graph, String> {
+        self.check()?;
         store::load(&self.path).map_err(|e| e.to_string())
     }
 
@@ -67,9 +74,18 @@ impl Session {
     /// Nothing is validated here either way: the graph is the authority on what
     /// it accepts, so each line goes to the parser and any refusal comes
     /// straight back.
+    ///
+    /// The document is held from before it is read until it is saved, so a
+    /// change the terminal or an agent makes meanwhile waits rather than
+    /// being saved over.
     fn execute_all(&self, lines: &[String]) -> Result<Outcome, String> {
-        let edit = branchy_app::apply_lines(self.load()?, lines).map_err(|e| e.to_string())?;
-        store::save_change(&self.path, &edit.graph, &edit.undo).map_err(|e| e.to_string())?;
+        self.check()?;
+        let editing = store::Editing::begin(&self.path).map_err(|e| e.to_string())?;
+        let graph = editing.load().map_err(|e| e.to_string())?;
+        let edit = branchy_app::apply_lines(graph, lines).map_err(|e| e.to_string())?;
+        editing
+            .save(&edit.graph, &edit.undo)
+            .map_err(|e| e.to_string())?;
         Ok(Outcome {
             node: edit.node.map(|id| id.to_string()),
             area: edit.area.map(|id| id.to_string()),
@@ -79,6 +95,7 @@ impl Session {
 
     /// Takes back the last change.
     fn undo(&self) -> Result<Outcome, String> {
+        self.check()?;
         store::undo(&self.path).map_err(|e| e.to_string())?;
         Ok(Outcome {
             node: None,
@@ -733,6 +750,11 @@ mod tests {
             .session()
             .expect("still open")
             .execute_all(&lines(&["area Jobs"]));
+        assert!(refused.expect_err("refused").contains("is gone"));
+        assert!(!scratch.dir().join("Work").exists());
+
+        // undo takes the lock, and the lock lives in the vault's folder
+        let refused = desk.session().expect("still open").undo();
         assert!(refused.expect_err("refused").contains("is gone"));
         assert!(!scratch.dir().join("Work").exists());
     }

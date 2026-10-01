@@ -9,6 +9,7 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use branchy_core::{Area, AreaId, Command, Date, Graph, Node, NodeId, Stage};
 use serde::{Deserialize, Serialize};
@@ -161,6 +162,9 @@ pub enum StoreError {
     /// older build, so the undo history no longer fits it and was cleared.
     /// Carries where the copy from before Branchy's last change is kept.
     UndoStale(PathBuf),
+    /// Another process has been changing the document for longer than a
+    /// change is willing to wait.
+    Busy(PathBuf),
 }
 
 impl std::fmt::Display for StoreError {
@@ -208,6 +212,12 @@ impl std::fmt::Display for StoreError {
             Self::AmbiguousVault(name) => write!(
                 f,
                 "more than one recent vault is called {name}; give its folder instead"
+            ),
+            Self::Busy(path) => write!(
+                f,
+                "another Branchy has been changing {} for over ten seconds, so nothing \
+                 was changed. Try again",
+                path.display()
             ),
             Self::UndoStale(previous) => write!(
                 f,
@@ -421,6 +431,107 @@ impl Dirs {
     }
 }
 
+/// How long a change waits for another one to finish before giving up.
+const LOCK_WAIT: Duration = Duration::from_secs(10);
+
+/// One change to a document, with the document held while it happens.
+///
+/// Every change reads the whole document, alters it and writes it back. Two
+/// processes doing that at once both read the same version, and whichever
+/// saves second throws the other's change away without a word: forty
+/// commands adding a task each, run in parallel, left nine tasks and
+/// fifteen errors. So a change takes the document's lock before it reads,
+/// and keeps it until it has saved.
+///
+/// ```no_run
+/// # fn main() -> Result<(), branchy_app::StoreError> {
+/// # let path = std::path::Path::new("graph.json");
+/// let editing = branchy_app::store::Editing::begin(path)?;
+/// let graph = editing.load()?;
+/// // ... apply the change, keeping its inverse commands ...
+/// # let undo = Vec::new();
+/// editing.save(&graph, &undo)?;
+/// # Ok(()) }
+/// ```
+///
+/// The lock is the operating system's, on a file in `.branchy/`, so it goes
+/// with the process that held it and a crash cannot leave a stale one
+/// behind. It is released when this value is dropped, which is what lets a
+/// change that is refused half way simply return. Readers take no lock: a
+/// save lands by renaming a finished file over the old one, so a reader sees
+/// one version or the other and never half of one.
+///
+/// This covers processes on one device. Two devices are what phase 3's
+/// merging is for.
+#[derive(Debug)]
+pub struct Editing {
+    path: PathBuf,
+    _lock: fs::File,
+}
+
+impl Editing {
+    /// Takes the document's lock, waiting up to ten seconds for a change
+    /// another process is making to finish.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError::Busy`] if it is still held after that, or
+    /// [`StoreError::Io`] if the lock file cannot be made.
+    pub fn begin(path: &Path) -> Result<Self, StoreError> {
+        Self::begin_within(path, LOCK_WAIT)
+    }
+
+    fn begin_within(path: &Path, wait: Duration) -> Result<Self, StoreError> {
+        let path = real_path(path);
+        let lock = lock_path(&path);
+        if let Some(dir) = lock.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock)?;
+        let deadline = Instant::now() + wait;
+        loop {
+            match file.try_lock() {
+                Ok(()) => return Ok(Self { path, _lock: file }),
+                Err(fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(fs::TryLockError::WouldBlock) => return Err(StoreError::Busy(path)),
+                Err(fs::TryLockError::Error(e)) => return Err(StoreError::Io(e)),
+            }
+        }
+    }
+
+    /// Reads the document, as [`load`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`load`].
+    pub fn load(&self) -> Result<Graph, StoreError> {
+        load(&self.path)
+    }
+
+    /// Saves the changed graph, as [`save_change`] does, and lets go of the
+    /// document.
+    ///
+    /// # Errors
+    ///
+    /// As [`save_change`].
+    pub fn save(self, graph: &Graph, undo: &[Command]) -> Result<(), StoreError> {
+        save_change(&self.path, graph, undo)
+    }
+}
+
+/// `.branchy/graph.json.lock` for `graph.json`: one lock per document.
+fn lock_path(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".lock");
+    path.with_file_name(LOCAL_DIR).join(name)
+}
+
 /// Reads the graph, or returns an empty one if the file is not there yet.
 ///
 /// # Errors
@@ -437,7 +548,9 @@ pub fn load(path: &Path) -> Result<Graph, StoreError> {
 
 /// Writes the graph, keeping the whole previous document to undo to.
 ///
-/// For a document saved directly rather than edited by commands. An edit has
+/// Takes no lock: a change by a front end goes through [`Editing`], which
+/// holds one from before the read to after this write. This is for a
+/// document saved directly rather than edited by commands. An edit has
 /// its inverse commands and goes through [`save_change`], which keeps a few
 /// hundred bytes instead of a copy of the document.
 ///
@@ -508,10 +621,13 @@ fn save_with(path: &Path, graph: &Graph, undo: Option<&[Command]>) -> Result<(),
 ///
 /// # Errors
 ///
+/// [`StoreError::Busy`] when another change will not finish,
 /// [`StoreError::NothingToUndo`] when there is no history,
 /// [`StoreError::UndoStale`] when the document changed outside Branchy since
 /// its last change, otherwise [`StoreError::Io`].
 pub fn undo(path: &Path) -> Result<(), StoreError> {
+    // a whole change by itself, so it holds the document like one
+    let _held = Editing::begin(path)?;
     let path = &real_path(path);
     tidy_loose_undo(path)?;
     let mut entries = history::read(path);
@@ -713,9 +829,38 @@ fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+    // named per process, so two writers can never share one temporary file
     let mut temporary = path.as_os_str().to_os_string();
-    temporary.push(".tmp");
+    temporary.push(format!(".{}.tmp", std::process::id()));
     let temporary = PathBuf::from(temporary);
     fs::write(&temporary, text)?;
     fs::rename(&temporary, path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Editing, StoreError};
+    use std::time::Duration;
+
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("branchy-store-test-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir.join("graph.json")
+    }
+
+    #[test]
+    fn a_second_change_waits_for_the_first_and_then_gets_its_turn() {
+        let path = scratch("lock");
+        let first = Editing::begin(&path).expect("free");
+        // the lock is per open file, so this process can contend with itself
+        assert!(matches!(
+            Editing::begin_within(&path, Duration::from_millis(100)),
+            Err(StoreError::Busy(_))
+        ));
+        drop(first);
+        Editing::begin_within(&path, Duration::from_millis(100)).expect("free again");
+        let _ = std::fs::remove_dir_all(path.parent().expect("dir"));
+    }
 }

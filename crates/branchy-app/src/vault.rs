@@ -236,10 +236,11 @@ impl Vaults {
         let exists = path.exists();
         let mut list = Self::load(path)?;
         list.legacy = Some(legacy.to_path_buf());
-        if !exists && legacy.join(DOCUMENT).is_file() {
-            if let Ok(vault) = Vault::open(legacy) {
-                list.opened(&vault);
-            }
+        if !exists
+            && legacy.join(DOCUMENT).is_file()
+            && let Ok(vault) = Vault::open(legacy)
+        {
+            list.opened(&vault);
         }
         Ok(list)
     }

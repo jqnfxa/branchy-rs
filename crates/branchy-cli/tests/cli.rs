@@ -1210,3 +1210,38 @@ fn help_points_agents_at_the_guide() {
         .expect("binary runs");
     assert!(String::from_utf8_lossy(&output.stdout).contains("branchy guide"));
 }
+
+// ── many writers at once ────────────────────────────────────────────────
+
+#[test]
+fn changes_made_at_the_same_moment_are_all_kept() {
+    // Each command reads the whole document and writes it back. Before the
+    // lock, forty of these at once left about nine tasks: the rest were
+    // saved over without a word, or failed renaming a shared temporary file.
+    let scratch = Scratch::new("parallel");
+    run(&scratch, &["area", "Work"]);
+    let children: Vec<std::process::Child> = (0..40)
+        .map(|i| {
+            Command::new(binary())
+                .arg("--file")
+                .arg(scratch.path())
+                .args(["add", &format!("Task {i}")])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .expect("binary runs")
+        })
+        .collect();
+    for child in children {
+        let output = child.wait_with_output().expect("binary exits");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let list = run(&scratch, &["--plain", "list"]);
+    assert!(list.starts_with("# 40 tasks\n"), "{list}");
+    // and every one of them can be taken back, one at a time
+    assert!(run(&scratch, &["undo"]).contains("0/39 done"));
+}

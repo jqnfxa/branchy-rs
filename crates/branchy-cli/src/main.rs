@@ -256,88 +256,57 @@ fn run(cli: &Cli) -> Result<String, String> {
         _ => {}
     }
 
-    let graph = load(&path)?;
-
     let plain = cli.plain;
-    if let Cmd::Brief { limit } = &cli.command {
-        let title = vault_title(&path);
-        return Ok(if plain {
-            plain::brief(&graph, &title, *limit)
-        } else {
-            render::brief(&graph, &title, *limit)
-        });
-    }
-    if let Some(shown) = view(&cli.command, &graph, plain) {
-        return shown;
-    }
 
-    // everything else is a mutation, expressed in the shared grammar
-    if let Cmd::Run(rest) = &cli.command {
-        if rest.args == ["-"] {
-            let mut text = String::new();
-            std::io::stdin()
-                .read_to_string(&mut text)
-                .map_err(|e| format!("could not read the batch from stdin: {e}"))?;
-            return batch(&path, graph, &text, plain);
+    // Everything a change needs is gathered before the document is taken,
+    // stdin above all: a batch arriving slowly must not hold every other
+    // writer up while it does.
+    let Some(lines) = change_lines(&cli.command)? else {
+        let graph = load(&path)?;
+        if let Cmd::Brief { limit } = &cli.command {
+            let title = vault_title(&path);
+            return Ok(if plain {
+                plain::brief(&graph, &title, *limit)
+            } else {
+                render::brief(&graph, &title, *limit)
+            });
         }
-    }
-
-    let line = match &cli.command {
-        Cmd::Add(rest) => line("add", &rest.args),
-        Cmd::Done(rest) => line("done", &rest.args),
-        Cmd::Undone(rest) => line("undone", &rest.args),
-        Cmd::Todo(rest) => line("todo", &rest.args),
-        Cmd::Start(rest) => line("start", &rest.args),
-        Cmd::Review(rest) => line("review", &rest.args),
-        Cmd::Stage(rest) => line("stage", &rest.args),
-        Cmd::Rm(rest) => line("rm", &rest.args),
-        Cmd::Pri(rest) => line("pri", &rest.args),
-        Cmd::Due(rest) => line("due", &rest.args),
-        Cmd::Rename(rest) => line("rename", &rest.args),
-        Cmd::Note(rest) => line("note", &rest.args),
-        Cmd::Move(rest) => line("move", &rest.args),
-        Cmd::Link(rest) => line("link", &rest.args),
-        Cmd::Unlink(rest) => line("unlink", &rest.args),
-        Cmd::Area(rest) => line("area", &rest.args),
-        Cmd::RenameArea(rest) => line("rename-area", &rest.args),
-        Cmd::RecolorArea(rest) => line("recolor-area", &rest.args),
-        Cmd::Rmarea(rest) => line("rmarea", &rest.args),
-        Cmd::Run(rest) => join(&rest.args),
-        Cmd::Guide
-        | Cmd::Brief { .. }
-        | Cmd::Queue { .. }
-        | Cmd::List { .. }
-        | Cmd::Board { .. }
-        | Cmd::Find { .. }
-        | Cmd::Tree
-        | Cmd::Why(_)
-        | Cmd::Show(_)
-        | Cmd::Cycles
-        | Cmd::Calendar { .. }
-        | Cmd::Snapshot
-        | Cmd::Undo
-        | Cmd::Where
-        | Cmd::Vault { .. } => unreachable!("handled above"),
+        return view(&cli.command, &graph, plain).unwrap_or_else(|| unreachable!("a view"));
     };
+
+    // held from before the read to after the save, so a change made by
+    // another process in between cannot be saved over
+    let editing = store::Editing::begin(&path).map_err(|e| e.to_string())?;
+    let graph = editing
+        .load()
+        .map_err(|e| format!("{} ({})", e, path.display()))?;
+    if let Cmd::Run(rest) = &cli.command
+        && rest.args == ["-"]
+    {
+        return batch(editing, graph, &lines, plain);
+    }
+    let line = lines.into_iter().next().unwrap_or_default();
 
     let edit = branchy_app::apply_lines(graph, &[line]).map_err(|e| e.message)?;
     let graph = edit.graph;
-    store::save_change(&path, &graph, &edit.undo).map_err(|e| e.to_string())?;
+    editing
+        .save(&graph, &edit.undo)
+        .map_err(|e| e.to_string())?;
     if plain {
         return Ok(plain::changed(&graph, edit.node));
     }
 
     let mut out = String::new();
-    if let Some(id) = edit.node {
-        if let Some(node) = graph.node(id) {
-            let status = graph.status(id).unwrap_or(Status::Locked);
-            let _ = writeln!(
-                out,
-                "{}  {id}  {}",
-                node.name,
-                format!("{status:?}").to_lowercase()
-            );
-        }
+    if let Some(id) = edit.node
+        && let Some(node) = graph.node(id)
+    {
+        let status = graph.status(id).unwrap_or(Status::Locked);
+        let _ = writeln!(
+            out,
+            "{}  {id}  {}",
+            node.name,
+            format!("{status:?}").to_lowercase()
+        );
     }
     let _ = writeln!(out, "{}", tally(&graph));
     Ok(out)
@@ -399,16 +368,73 @@ fn view(command: &Cmd, graph: &Graph, plain: bool) -> Option<Result<String, Stri
     Some(shown)
 }
 
+/// The command lines a command amounts to, or `None` for one that only reads.
+/// A batch's come from stdin, read here and in full before anything is
+/// locked.
+fn change_lines(command: &Cmd) -> Result<Option<Vec<String>>, String> {
+    let line = match command {
+        Cmd::Add(rest) => line("add", &rest.args),
+        Cmd::Done(rest) => line("done", &rest.args),
+        Cmd::Undone(rest) => line("undone", &rest.args),
+        Cmd::Todo(rest) => line("todo", &rest.args),
+        Cmd::Start(rest) => line("start", &rest.args),
+        Cmd::Review(rest) => line("review", &rest.args),
+        Cmd::Stage(rest) => line("stage", &rest.args),
+        Cmd::Rm(rest) => line("rm", &rest.args),
+        Cmd::Pri(rest) => line("pri", &rest.args),
+        Cmd::Due(rest) => line("due", &rest.args),
+        Cmd::Rename(rest) => line("rename", &rest.args),
+        Cmd::Note(rest) => line("note", &rest.args),
+        Cmd::Move(rest) => line("move", &rest.args),
+        Cmd::Link(rest) => line("link", &rest.args),
+        Cmd::Unlink(rest) => line("unlink", &rest.args),
+        Cmd::Area(rest) => line("area", &rest.args),
+        Cmd::RenameArea(rest) => line("rename-area", &rest.args),
+        Cmd::RecolorArea(rest) => line("recolor-area", &rest.args),
+        Cmd::Rmarea(rest) => line("rmarea", &rest.args),
+        Cmd::Run(rest) if rest.args == ["-"] => {
+            let mut text = String::new();
+            std::io::stdin()
+                .read_to_string(&mut text)
+                .map_err(|e| format!("could not read the batch from stdin: {e}"))?;
+            return Ok(Some(text.lines().map(str::to_string).collect()));
+        }
+        Cmd::Run(rest) => join(&rest.args),
+        Cmd::Guide
+        | Cmd::Brief { .. }
+        | Cmd::Queue { .. }
+        | Cmd::List { .. }
+        | Cmd::Board { .. }
+        | Cmd::Find { .. }
+        | Cmd::Tree
+        | Cmd::Why(_)
+        | Cmd::Show(_)
+        | Cmd::Cycles
+        | Cmd::Calendar { .. }
+        | Cmd::Snapshot
+        | Cmd::Undo
+        | Cmd::Where
+        | Cmd::Vault { .. } => return Ok(None),
+    };
+    Ok(Some(vec![line]))
+}
+
 /// Applies a whole batch as one change.
 ///
 /// A refusal names its line, because in a batch of two hundred the message
 /// alone does not say where to look. Nothing is saved unless every line was
 /// accepted.
-fn batch(path: &Path, graph: Graph, text: &str, plain: bool) -> Result<String, String> {
-    let lines: Vec<&str> = text.lines().collect();
-    let edit = branchy_app::apply_lines(graph, &lines)
+fn batch(
+    editing: store::Editing,
+    graph: Graph,
+    lines: &[String],
+    plain: bool,
+) -> Result<String, String> {
+    let edit = branchy_app::apply_lines(graph, lines)
         .map_err(|e| format!("line {}: {}", e.line, e.message))?;
-    store::save_change(path, &edit.graph, &edit.undo).map_err(|e| e.to_string())?;
+    editing
+        .save(&edit.graph, &edit.undo)
+        .map_err(|e| e.to_string())?;
     if plain {
         return Ok(plain::made(&edit.made));
     }

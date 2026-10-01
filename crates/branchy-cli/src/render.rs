@@ -378,10 +378,10 @@ pub fn list(graph: &Graph, filter: &Filter<'_>, limit: Option<usize>) -> String 
         if left == 0 {
             break;
         }
-        if let Some(wanted) = area_filter {
-            if !area.name.to_lowercase().contains(&wanted.to_lowercase()) {
-                continue;
-            }
+        if let Some(wanted) = area_filter
+            && !area.name.to_lowercase().contains(&wanted.to_lowercase())
+        {
+            continue;
         }
         let rows: Vec<NodeId> = graph
             .nodes()
