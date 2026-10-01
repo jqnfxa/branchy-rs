@@ -906,11 +906,11 @@ fn plain_rows_carry_ids_and_whole_names() {
     run(&scratch, &["add", long, "pri", "9"]);
     let out = run(&scratch, &["--plain", "queue"]);
     assert!(
-        out.contains("# id\tstatus\tpri\tarea\ttier\tdue\tneeds\tname"),
+        out.contains("# id\tstatus\tstage\tpri\tarea\ttier\tdue\tneeds\tname"),
         "{out}"
     );
     assert!(
-        out.contains(&format!("n3\tavailable\t9\ta0\t0\t-\t-\t{long}")),
+        out.contains(&format!("n3\tavailable\tbacklog\t9\ta0\t0\t-\t-\t{long}")),
         "{out}"
     );
     assert!(out.contains("# a0\tHard skills"), "{out}");
@@ -921,7 +921,7 @@ fn plain_rows_refer_to_prerequisites_by_id() {
     let scratch = seeded("plain-tree");
     let out = run(&scratch, &["--plain", "tree"]);
     assert!(
-        out.contains("n2\tlocked\t8\ta0\t2\t-\tn1\tProbability theory"),
+        out.contains("n2\tlocked\tbacklog\t8\ta0\t2\t-\tn1\tProbability theory"),
         "{out}"
     );
 }
@@ -963,7 +963,7 @@ fn plain_show_ends_with_the_note_as_written() {
 fn a_plain_change_prints_the_row_it_changed() {
     let scratch = seeded("plain-change");
     let out = run(&scratch, &["--plain", "done", "school"]);
-    assert_eq!(out, "n0\tdone\t3\ta0\t0\t-\t-\tSchool algebra\n");
+    assert_eq!(out, "n0\tdone\tdone\t3\ta0\t0\t-\t-\tSchool algebra\n");
 }
 
 #[test]
@@ -997,7 +997,7 @@ fn brief_gives_counts_directions_and_the_top_of_the_queue() {
     );
     assert!(plain.contains("# a0\tHard skills\t1/3"), "{plain}");
     assert!(
-        plain.contains("n1\tavailable\t6\ta0\t1\t-\tn0\tCalculus"),
+        plain.contains("n1\tavailable\tbacklog\t6\ta0\t1\t-\tn0\tCalculus"),
         "{plain}"
     );
     assert!(plain.ends_with("# cycles 0\n"), "{plain}");
@@ -1086,4 +1086,82 @@ fn the_guide_needs_no_vault() {
         .output()
         .expect("binary runs");
     assert!(output.status.success());
+}
+
+// ── the board ───────────────────────────────────────────────────────────
+
+#[test]
+fn the_stage_verbs_move_a_task_across_the_board() {
+    let scratch = seeded("stages");
+    run(&scratch, &["todo", "school"]);
+    assert!(run(&scratch, &["--plain", "show", "school"]).contains("\ttodo\t"));
+    run(&scratch, &["start", "school"]);
+    run(&scratch, &["review", "school"]);
+    // review does not unlock calculus
+    assert!(run(&scratch, &["--plain", "show", "calculus"]).contains("locked\tbacklog"));
+    run(&scratch, &["stage", "school", "done"]);
+    assert!(run(&scratch, &["--plain", "show", "calculus"]).contains("available\tbacklog"));
+}
+
+#[test]
+fn starting_a_locked_task_is_refused_by_name() {
+    let scratch = seeded("start-locked");
+    let complaint = fails(&scratch, &["start", "calculus"]);
+    assert!(
+        complaint.contains("Calculus cannot be started"),
+        "{complaint}"
+    );
+    // planning it is fine
+    run(&scratch, &["todo", "calculus"]);
+}
+
+#[test]
+fn the_board_shows_every_column() {
+    let scratch = seeded("board");
+    run(&scratch, &["start", "school"]);
+    run(&scratch, &["todo", "probability"]);
+    let human = run(&scratch, &["board"]);
+    for heading in [
+        "BACKLOG  0 ready, 1 locked",
+        "TODO  1",
+        "DOING  1",
+        "REVIEW  0",
+        "DONE  0",
+    ] {
+        assert!(human.contains(heading), "{heading}: {human}");
+    }
+    let plain = run(&scratch, &["--plain", "board"]);
+    assert!(
+        plain.starts_with("# board\tbacklog 1\ttodo 1\tdoing 1\treview 0\tdone 0\n"),
+        "{plain}"
+    );
+    assert!(
+        plain.contains("# 1 doing\nn0\tavailable\tdoing\t3"),
+        "{plain}"
+    );
+}
+
+#[test]
+fn list_filters_by_stage() {
+    let scratch = seeded("list-stage");
+    run(&scratch, &["start", "school"]);
+    let out = run(&scratch, &["--plain", "list", "--stage", "doing"]);
+    assert!(out.starts_with("# 1 tasks"), "{out}");
+    assert!(fails(&scratch, &["list", "--stage", "closed"]).contains("unknown stage"));
+}
+
+#[test]
+fn the_queue_says_which_tasks_are_already_under_way() {
+    let scratch = seeded("queue-stage");
+    run(&scratch, &["start", "school"]);
+    assert!(run(&scratch, &["queue"]).contains("doing"));
+}
+
+#[test]
+fn a_format_two_document_is_written_and_read_back() {
+    let scratch = seeded("format-two");
+    run(&scratch, &["review", "school"]);
+    let text = std::fs::read_to_string(scratch.path()).expect("saved");
+    assert!(text.contains(r#""version": 2"#), "{text}");
+    assert!(run(&scratch, &["--plain", "show", "school"]).contains("\treview\t"));
 }

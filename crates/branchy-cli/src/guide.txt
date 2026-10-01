@@ -1,8 +1,10 @@
 Branchy for agents and scripts
 
 A dependency graph of tasks. A task is available when every task it needs
-is done; the queue is the available tasks, most urgent first. Always pass
---plain: one tab-separated line per task, whole names, ids instead of names.
+is done; the queue is the available tasks, most urgent first. Each task also
+sits on a board: backlog, todo, doing, review, done. Only done unlocks what
+needs it. Always pass --plain: one tab-separated line per task, whole names,
+ids instead of names.
 
   branchy [--plain] [--vault NAME | --file PATH] <command>
 
@@ -21,7 +23,11 @@ $ branchy --plain add "Probability theory" after n1
 $ branchy --plain add Scratch before n2       # before: n2 needs the new task
 $ branchy --plain unlink n2 after n3          # n2 no longer needs n3
 $ branchy --plain link n2 after n0            # n2 needs n0
-$ branchy --plain done n0                     # undone n0 reverses it
+$ branchy --plain done n0                     # undone n0 puts it back in the backlog
+$ branchy --plain todo n2                     # plan it; a locked task may be planned
+$ branchy --plain start n1                    # doing; only an available task starts
+$ branchy --plain review n1                   # finished, to be checked; unlocks nothing yet
+$ branchy --plain stage n1 doing              # any stage: backlog todo doing review done
 $ branchy --plain pri n1 8                    # 0-255, higher is more urgent
 $ branchy --plain due n1 2026-11-30           # due n1 none clears it
 $ branchy --plain rename n1 "Calculus I"
@@ -36,6 +42,8 @@ $ branchy undo                                # takes back the last change
 
 Read
 $ branchy --plain queue --limit 10            # available now, most urgent first
+$ branchy --plain board --limit 5             # every column; backlog and done cut to 5
+$ branchy --plain list --stage doing          # what is being worked on
 $ branchy --plain list --status locked --limit 20
 $ branchy --plain tree                        # every task, by direction and tier
 $ branchy --plain show n2                     # one task, what it unlocks, its note
@@ -43,8 +51,9 @@ $ branchy --plain why n2                      # what has to be done first, in or
 $ branchy --plain calendar --limit 10         # deadlines, soonest first
 $ branchy cycles                              # loops, and the unlink that breaks each
 
-Rows: id status pri area tier due needs name
+Rows: id status stage pri area tier due needs name
   status  available | locked (a prerequisite is not done) | done | cyclic
+  stage   backlog | todo | doing | review | done
   tier    1 + the highest tier among its prerequisites, 0 with none
   due     the deadline it works to, inherited from what it unblocks, or -
   needs   prerequisite ids, comma-separated, or -

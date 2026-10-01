@@ -23,7 +23,7 @@ use branchy_app::today::today;
 use branchy_core::{AreaId, Date, Graph, NodeId, Status};
 
 /// What every row's fields are, in order.
-const HEADER: &str = "# id\tstatus\tpri\tarea\ttier\tdue\tneeds\tname\n";
+const HEADER: &str = "# id\tstatus\tstage\tpri\tarea\ttier\tdue\tneeds\tname\n";
 
 /// Everything a row needs that is derived from the whole graph, worked out
 /// once per view rather than once per row.
@@ -83,8 +83,9 @@ fn row(out: &mut String, graph: &Graph, derived: &Derived, id: NodeId) {
     };
     let _ = writeln!(
         out,
-        "{id}\t{}\t{}\t{}\t{tier}\t{due}\t{needs}\t{}",
+        "{id}\t{}\t{}\t{}\t{}\t{tier}\t{due}\t{needs}\t{}",
         status_word(status),
+        node.stage,
         node.priority,
         node.area,
         flat(&node.name)
@@ -148,6 +149,23 @@ pub fn brief(graph: &Graph, title: &str, limit: usize) -> String {
     }
     let derived = Derived::of(graph);
 
+    let board = graph.board();
+    let _ = writeln!(
+        out,
+        "# board\ttodo {}\tdoing {}\treview {}",
+        board.todo.len(),
+        board.doing.len(),
+        board.review.len()
+    );
+    let started: Vec<NodeId> = board.doing.iter().chain(&board.review).copied().collect();
+    if !started.is_empty() {
+        count(&mut out, started.len(), started.len(), "in progress");
+        out.push_str(HEADER);
+        for id in &started {
+            row(&mut out, graph, &derived, *id);
+        }
+    }
+
     let queue = graph.queue();
     count(&mut out, queue.len().min(limit), queue.len(), "available");
     out.push_str(HEADER);
@@ -171,6 +189,57 @@ pub fn brief(graph: &Graph, title: &str, limit: usize) -> String {
     out
 }
 
+/// The board's columns, each a section of rows. The backlog and done are cut
+/// to `limit`; todo, doing and review are shown whole.
+#[must_use]
+pub fn board(graph: &Graph, limit: usize) -> String {
+    let board = graph.board();
+    let mut out = format!(
+        "# board\tbacklog {}\ttodo {}\tdoing {}\treview {}\tdone {}\n",
+        board.backlog_ready.len() + board.backlog_locked.len(),
+        board.todo.len(),
+        board.doing.len(),
+        board.review.len(),
+        board.done.len()
+    );
+    let cut = |ids: &[NodeId], limit: Option<usize>| -> Vec<NodeId> {
+        ids.iter()
+            .copied()
+            .take(limit.unwrap_or(usize::MAX))
+            .collect()
+    };
+    let sections = [
+        (
+            "backlog ready",
+            cut(&board.backlog_ready, Some(limit)),
+            board.backlog_ready.len(),
+        ),
+        (
+            "backlog locked",
+            cut(&board.backlog_locked, Some(limit)),
+            board.backlog_locked.len(),
+        ),
+        ("todo", cut(&board.todo, None), board.todo.len()),
+        ("doing", cut(&board.doing, None), board.doing.len()),
+        ("review", cut(&board.review, None), board.review.len()),
+        ("done", cut(&board.done, Some(limit)), board.done.len()),
+    ];
+    let shown: Vec<NodeId> = sections
+        .iter()
+        .flat_map(|(_, ids, _)| ids.iter().copied())
+        .collect();
+    legend(&mut out, graph, &shown);
+    out.push_str(HEADER);
+    let derived = Derived::of(graph);
+    for (title, ids, total) in &sections {
+        count(&mut out, ids.len(), *total, title);
+        for id in ids {
+            row(&mut out, graph, &derived, *id);
+        }
+    }
+    out
+}
+
 /// The available frontier, most urgent first.
 #[must_use]
 pub fn queue(graph: &Graph, limit: Option<usize>) -> String {
@@ -185,18 +254,16 @@ pub fn queue(graph: &Graph, limit: Option<usize>) -> String {
 
 /// Every task, optionally filtered, in id order.
 #[must_use]
-pub fn list(
-    graph: &Graph,
-    area_filter: Option<&str>,
-    status_filter: Option<Status>,
-    limit: Option<usize>,
-) -> String {
+pub fn list(graph: &Graph, filter: &crate::render::Filter<'_>, limit: Option<usize>) -> String {
     let statuses = graph.statuses();
-    let wanted_area = area_filter.map(str::to_lowercase);
+    let wanted_area = filter.area.map(str::to_lowercase);
     let all: Vec<NodeId> = graph
         .nodes()
         .filter(|(id, node)| {
-            status_filter.is_none_or(|want| statuses.get(id) == Some(&want))
+            filter
+                .status
+                .is_none_or(|want| statuses.get(id) == Some(&want))
+                && filter.stage.is_none_or(|want| node.stage == want)
                 && wanted_area.as_ref().is_none_or(|wanted| {
                     graph
                         .area(node.area)

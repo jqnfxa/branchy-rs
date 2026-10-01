@@ -54,10 +54,18 @@ struct Rest {
 enum Cmd {
     /// Create a task: add "Name" [in <direction>] [after a, b] [before c] [pri n]
     Add(Rest),
-    /// Mark a task done
+    /// Mark a task done, which unlocks whatever needs it
     Done(Rest),
-    /// Mark a task not done
+    /// Mark a task not done; it goes back to the backlog
     Undone(Rest),
+    /// Plan a task to be done next. A locked task may be planned ahead.
+    Todo(Rest),
+    /// Start working on a task. Only an available task can be started.
+    Start(Rest),
+    /// Mark a task finished but waiting to be checked. It unlocks nothing yet.
+    Review(Rest),
+    /// Move a task to a stage: stage <task> <backlog|todo|doing|review|done>
+    Stage(Rest),
     /// Delete a task and strip it from everything that needed it
     Rm(Rest),
     /// Set a task's priority: pri <task> <0-255>
@@ -112,9 +120,18 @@ enum Cmd {
         /// Only this status: done, available, locked, cyclic
         #[arg(long)]
         status: Option<String>,
+        /// Only this stage: backlog, todo, doing, review, done
+        #[arg(long)]
+        stage: Option<String>,
         /// Only the first this many
         #[arg(long)]
         limit: Option<usize>,
+    },
+    /// The board: backlog, todo, doing, review and done
+    Board {
+        /// How many to show of the backlog and of done, which run long
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
     },
     /// The whole graph, by direction and tier
     Tree,
@@ -251,6 +268,10 @@ fn run(cli: &Cli) -> Result<String, String> {
         Cmd::Add(rest) => line("add", &rest.args),
         Cmd::Done(rest) => line("done", &rest.args),
         Cmd::Undone(rest) => line("undone", &rest.args),
+        Cmd::Todo(rest) => line("todo", &rest.args),
+        Cmd::Start(rest) => line("start", &rest.args),
+        Cmd::Review(rest) => line("review", &rest.args),
+        Cmd::Stage(rest) => line("stage", &rest.args),
         Cmd::Rm(rest) => line("rm", &rest.args),
         Cmd::Pri(rest) => line("pri", &rest.args),
         Cmd::Due(rest) => line("due", &rest.args),
@@ -268,6 +289,7 @@ fn run(cli: &Cli) -> Result<String, String> {
         | Cmd::Brief { .. }
         | Cmd::Queue { .. }
         | Cmd::List { .. }
+        | Cmd::Board { .. }
         | Cmd::Tree
         | Cmd::Why(_)
         | Cmd::Show(_)
@@ -315,21 +337,20 @@ fn view(command: &Cmd, graph: &Graph, plain: bool) -> Option<Result<String, Stri
         Cmd::Snapshot => serde_json::to_string_pretty(&snapshot::Snapshot::of(graph))
             .map(|json| format!("{json}\n"))
             .map_err(|e| e.to_string()),
+        Cmd::Board { limit } if plain => Ok(plain::board(graph, *limit)),
+        Cmd::Board { limit } => Ok(render::board(graph, *limit)),
         Cmd::List {
             area,
             status,
+            stage,
             limit,
-        } => status
-            .as_deref()
-            .map(parse_status)
-            .transpose()
-            .map(|wanted| {
-                if plain {
-                    plain::list(graph, area.as_deref(), wanted, *limit)
-                } else {
-                    render::list(graph, area.as_deref(), wanted, *limit)
-                }
-            }),
+        } => filter(area.as_deref(), status.as_deref(), stage.as_deref()).map(|filter| {
+            if plain {
+                plain::list(graph, &filter, *limit)
+            } else {
+                render::list(graph, &filter, *limit)
+            }
+        }),
         Cmd::Why(rest) => resolve(graph, &rest.args).map(|id| {
             if plain {
                 plain::why(graph, id)
@@ -483,6 +504,25 @@ fn tally(graph: &Graph) -> String {
         let _ = write!(line, ", {overdue} overdue");
     }
     line
+}
+
+/// What `list --area --status --stage` asked for.
+fn filter<'a>(
+    area: Option<&'a str>,
+    status: Option<&str>,
+    stage: Option<&str>,
+) -> Result<render::Filter<'a>, String> {
+    Ok(render::Filter {
+        area,
+        status: status.map(parse_status).transpose()?,
+        stage: stage
+            .map(|word| {
+                branchy_core::Stage::from_name(word).ok_or_else(|| {
+                    format!("unknown stage {word}, try backlog, todo, doing, review or done")
+                })
+            })
+            .transpose()?,
+    })
 }
 
 fn parse_status(word: &str) -> Result<Status, String> {

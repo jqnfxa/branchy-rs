@@ -165,6 +165,12 @@ pub fn describe(graph: &Graph, error: &Error) -> String {
             name(graph, *dependent),
             name(graph, *prerequisite)
         ),
+        Error::NotStartable { node, status } => format!(
+            "Refused: {} cannot be started while it is {}. Finish what it needs first, \
+             or plan it with todo.",
+            name(graph, *node),
+            format!("{status:?}").to_lowercase()
+        ),
         other => other.to_string(),
     }
 }

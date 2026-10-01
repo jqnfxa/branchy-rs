@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 
 use branchy_app::Vaults;
 use branchy_app::today::{Urgency, today};
-use branchy_core::{Date, Graph, NodeId, Status};
+use branchy_core::{Date, Graph, NodeId, Stage, Status};
 
 /// One marker per status, so a list stays scannable down the left edge.
 fn mark(status: Status) -> &'static str {
@@ -71,10 +71,16 @@ pub fn queue(graph: &Graph, limit: Option<usize>) -> String {
         let deadline = deadlines.get(id).map_or_else(String::new, |date| {
             format!("{:<14}", when(now.days_until(*date)))
         });
+        // past the backlog, say where it is on the board
+        let stage = if node.stage == Stage::Backlog {
+            String::new()
+        } else {
+            format!("{:<8}", node.stage.name())
+        };
         row(
             &mut out,
             &format!(
-                "{:>3}. {:<6} {:<38} p{:<3} {:<14} {deadline}{}",
+                "{:>3}. {:<6} {:<38} p{:<3} {:<14} {stage}{deadline}{}",
                 rank + 1,
                 id.to_string(),
                 truncate(&node.name, 38),
@@ -115,6 +121,18 @@ pub fn brief(graph: &Graph, title: &str, limit: usize) -> String {
         );
     }
 
+    let board = graph.board();
+    let _ = writeln!(
+        out,
+        "\nBoard: {} todo, {} doing, {} review.",
+        board.todo.len(),
+        board.doing.len(),
+        board.review.len()
+    );
+    for id in board.doing.iter().chain(&board.review) {
+        card(&mut out, graph, *id);
+    }
+
     out.push('\n');
     out.push_str(&queue(graph, Some(limit)));
 
@@ -147,6 +165,78 @@ pub fn brief(graph: &Graph, title: &str, limit: usize) -> String {
         );
     }
     out
+}
+
+/// The board: every column, the long ones cut to `limit`.
+///
+/// TODO, DOING and REVIEW are shown whole, because they are the work in hand
+/// and short by nature. The backlog and DONE are where hundreds of tasks sit,
+/// so they show their first `limit` and say how many more there are.
+#[must_use]
+pub fn board(graph: &Graph, limit: usize) -> String {
+    if graph.is_empty() {
+        return queue(graph, None);
+    }
+    let board = graph.board();
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "BACKLOG  {} ready, {} locked",
+        board.backlog_ready.len(),
+        board.backlog_locked.len()
+    );
+    column(&mut out, graph, &board.backlog_ready, Some(limit), "ready");
+    column(
+        &mut out,
+        graph,
+        &board.backlog_locked,
+        Some(limit),
+        "locked",
+    );
+    for (title, ids) in [
+        ("TODO", &board.todo),
+        ("DOING", &board.doing),
+        ("REVIEW", &board.review),
+    ] {
+        let _ = writeln!(out, "\n{title}  {}", ids.len());
+        column(&mut out, graph, ids, None, "");
+    }
+    let _ = writeln!(out, "\nDONE  {}", board.done.len());
+    column(&mut out, graph, &board.done, Some(limit), "done");
+    out
+}
+
+fn column(out: &mut String, graph: &Graph, ids: &[NodeId], limit: Option<usize>, what: &str) {
+    let shown = limit.map_or(ids.len(), |n| n.min(ids.len()));
+    for id in &ids[..shown] {
+        card(out, graph, *id);
+    }
+    if shown < ids.len() {
+        let _ = writeln!(out, "  … and {} more {what}", ids.len() - shown);
+    }
+}
+
+/// One task as a card: its id, its name, and what would stop it moving.
+fn card(out: &mut String, graph: &Graph, id: NodeId) {
+    let Some(node) = graph.node(id) else { return };
+    let status = graph.status(id).unwrap_or(Status::Locked);
+    // a started task whose prerequisite was reopened says so
+    let flag = if node.stage.is_started() && status != Status::Available {
+        "  (locked)"
+    } else {
+        ""
+    };
+    row(
+        out,
+        &format!(
+            "  {} {:<6} {:<38} p{:<3} {}{flag}",
+            mark(status),
+            id.to_string(),
+            truncate(&node.name, 38),
+            node.priority,
+            truncate(&area_of(graph, id), 16),
+        ),
+    );
 }
 
 /// How many tasks stand where.
@@ -231,14 +321,21 @@ pub fn due_soon(graph: &Graph, now: Date) -> Vec<(Date, NodeId)> {
     soon
 }
 
+/// What `list` keeps. Every part left `None` keeps everything.
+#[derive(Debug, Default)]
+pub struct Filter<'a> {
+    /// Directions whose name contains this, ignoring case.
+    pub area: Option<&'a str>,
+    /// Tasks with this status.
+    pub status: Option<Status>,
+    /// Tasks in this stage of the board.
+    pub stage: Option<Stage>,
+}
+
 /// Every task, grouped by direction, optionally filtered.
 #[must_use]
-pub fn list(
-    graph: &Graph,
-    area_filter: Option<&str>,
-    status_filter: Option<Status>,
-    limit: Option<usize>,
-) -> String {
+pub fn list(graph: &Graph, filter: &Filter<'_>, limit: Option<usize>) -> String {
+    let area_filter = filter.area;
     let statuses = graph.statuses();
     let mut out = String::new();
     let mut left = limit.unwrap_or(usize::MAX);
@@ -256,7 +353,10 @@ pub fn list(
             .nodes()
             .filter(|(id, node)| {
                 node.area == area_id
-                    && status_filter.is_none_or(|want| statuses.get(id) == Some(&want))
+                    && filter
+                        .status
+                        .is_none_or(|want| statuses.get(id) == Some(&want))
+                    && filter.stage.is_none_or(|want| node.stage == want)
             })
             .map(|(id, _)| id)
             .collect();
@@ -421,8 +521,9 @@ pub fn show(graph: &Graph, id: NodeId) -> String {
     let mut out = format!("{}  {id}\n", node.name);
     let _ = writeln!(
         out,
-        "  {:<10} {:<16} priority {}  tier {}",
+        "  {:<10} {:<8} {:<16} priority {}  tier {}",
         format!("{status:?}").to_lowercase(),
+        node.stage.name(),
         area_of(graph, id),
         node.priority,
         graph
