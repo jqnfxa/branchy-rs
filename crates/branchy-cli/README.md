@@ -32,7 +32,7 @@ Probability theory is locked. 1 task(s) stand in the way:
 
 `add` · `done` · `undone` · `todo` · `start` · `review` · `stage` · `rm` · `pri` · `due` · `rename` · `note` · `move` · `link` · `unlink` · `area` · `rename-area` · `recolor-area` · `rmarea` · `run`
 
-`brief` · `board` · `queue` · `list` · `tree` · `why` · `show` · `calendar` · `cycles` · `snapshot` · `undo` · `where` · `guide`
+`brief` · `find` · `board` · `queue` · `list` · `tree` · `why` · `show` · `calendar` · `cycles` · `snapshot` · `undo` · `where` · `guide`
 
 `vault list` · `vault new` · `vault open` · `vault forget`
 
@@ -47,7 +47,7 @@ Every task also sits on a board: backlog, todo, doing, review, done. `todo`, `st
 `branchy guide` prints one page on driving Branchy from a program. In short:
 
 - `--plain` prints one tab-separated line per task, with whole names and other tasks and directions referred to by id. A change prints the row it changed.
-- `brief` is where things stand in one screen. `--limit` on `queue`, `list` and `calendar` keeps the first few.
+- `brief` is where things stand in one screen. `find <text>` looks a task up by part of its name, `--notes` searching notes too. `--limit` on `queue`, `list`, `calendar` and `find` keeps the first few.
 - `branchy run -` reads many command lines from stdin and applies them as one change: all or nothing, one undo step. A line may begin with `$x =` to name what it creates, and later lines refer to it as `$x`.
 
 ```console
