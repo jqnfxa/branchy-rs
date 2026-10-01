@@ -89,7 +89,7 @@ Scale was tested on 2026-09-21 by importing a real project's planning docs, 817 
 
 Invariants worth not breaking:
 
-- Ids are never reused, including after an undone removal. A withdrawn id may already have been seen by another device.
+- Ids are never reused, including after an undone removal. A withdrawn id may already have been seen by another device. **The document stores the id counters** (`next_node`, `next_area`), because the counter is not always one past the highest id left, and undo carries them into the older document it puts back. Up to 0.2.7 neither was true: every command reloads the file, so removing the newest task handed its id to the next one, and a script holding that id silently edited a different task.
 - Every derived computation terminates on a cyclic graph.
 - The on-disk format lives in `branchy-app/src/store.rs`, written by hand and versioned, never derived from the core's internal layout. New fields are optional with a default, so older documents keep loading. Phase 3 swaps its body for Automerge behind `load` and `save`.
 - Saves are written to a sibling file and renamed over the target. A half-written document is exactly what a sync tool would propagate everywhere. The target is resolved through symlinks first: renaming over a link replaces the link, and the link and its file then silently fork.
@@ -101,11 +101,24 @@ Invariants worth not breaking:
 - **The desktop shell keeps using `Dirs::user()` on purpose.** Tauri's own path API would answer `~/.config/dev.jqnfxa.branchy` where `directories` answers `~/.config/branchy`, so switching would orphan an existing vault list. The injection exists for a platform that has no other answer, not to replace the one that works.
 - **The window's own modes go through the shell's commands, not Tauri's window API.** `core:default` grants the getters and none of the setters, so calling `setFullscreen` from the frontend would mean listing permissions in `capabilities/default.json`, whose description is that the shell "talks to the graph through its own commands and needs nothing else". A Rust command needs no capability at all and keeps one way of talking to the shell. The three modes are `windowed`, `borderless` (undecorated, filling the monitor the window is on) and `fullscreen`; leaving fullscreen comes first in each, because a fullscreen window drops a size rather than queueing it.
 - **The version in the window comes from the binary**, `env!("CARGO_PKG_VERSION")` through a command, never a constant in the frontend, so a build cannot report a version it is not.
+- **Every front end edits through `branchy_app::apply_lines`**: one or many lines, all or nothing. It takes the graph by value and returns it only on success, so a half-applied edit cannot be saved by mistake. Wording a refusal (`edit::describe`, `describe_parse`) lives there too, so the terminal and the window say the same thing.
+- **`branchy guide` (`crates/branchy-cli/src/guide.txt`) is the agents' reference**, and a test runs every `$ branchy` line in it in order, batch included. A new verb means a new line there as well as in the window's `GRAMMAR`.
 - **Anything the command line accepts has to be in the guide behind its `?`, and anything in the guide has to run.** The hint under the command line drifted for several releases into advertising `go`, which the parser has never had. Every example in `ui/app.js`'s `GRAMMAR` was checked with `branchy run` before it was written down, and a new verb means a new entry there in all five languages.
 
 - `BRANCHY_VAULTS` names the list file and turns off adopting a pre-vault graph from the old data directory. **Every test that reaches the vault list sets it and clears `BRANCHY_FILE`**, or it reads the developer's real list or follows their environment into their real graph.
 
 `concept.md` is an untracked personal draft.
+
+## Release plan (agreed 2026-10-01)
+
+The maintainer asked for these in order, each its own tagged release:
+
+- **0.2.8**: id reuse and the broken-pipe panic fixed.
+- **0.2.9**: agent mode. `--plain`, `brief`, `--limit`, ids on every row, ambiguity errors listing candidates, `run -` batches with `$labels`, `branchy guide`. All additive.
+- **0.2.10**: undo kept as a log of inverse commands instead of twenty whole copies of the document. Device-local, `graph.json` unchanged.
+- **0.3.0**: the board. A stored `stage` (`backlog`, `todo`, `doing`, `review`, `done`) replaces the `done` flag, format version 2, and older builds refuse the file, which the maintainer chose over a format they could read but would silently strip stages from. Columns are BACKLOG (split into ready and locked) | TODO | DOING | REVIEW | DONE. Only DONE unlocks dependents; REVIEW does not and can be skipped. A locked task may be planned into TODO but not started. It is 0.3.0 rather than 0.2.x because new `Command` and `Status` variants break exhaustive matches.
+
+Decided against for 0.3.0, on 2026-10-01: partial progress and recurrence (still open, below), and a `by` field recording who works on a task. Scrum was considered and dropped: a sprint is a timebox, and a deadline on a milestone already pulls its whole chain into one.
 
 ## Open decisions
 
