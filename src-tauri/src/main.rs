@@ -69,7 +69,7 @@ impl Session {
     /// straight back.
     fn execute_all(&self, lines: &[String]) -> Result<Outcome, String> {
         let edit = branchy_app::apply_lines(self.load()?, lines).map_err(|e| e.to_string())?;
-        store::save(&self.path, &edit.graph).map_err(|e| e.to_string())?;
+        store::save_change(&self.path, &edit.graph, &edit.undo).map_err(|e| e.to_string())?;
         Ok(Outcome {
             node: edit.node.map(|id| id.to_string()),
             area: edit.area.map(|id| id.to_string()),

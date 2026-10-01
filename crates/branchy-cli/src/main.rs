@@ -281,7 +281,7 @@ fn run(cli: &Cli) -> Result<String, String> {
 
     let edit = branchy_app::apply_lines(graph, &[line]).map_err(|e| e.message)?;
     let graph = edit.graph;
-    store::save(&path, &graph).map_err(|e| e.to_string())?;
+    store::save_change(&path, &graph, &edit.undo).map_err(|e| e.to_string())?;
     if plain {
         return Ok(plain::changed(&graph, edit.node));
     }
@@ -358,7 +358,7 @@ fn batch(path: &Path, graph: Graph, text: &str, plain: bool) -> Result<String, S
     let lines: Vec<&str> = text.lines().collect();
     let edit = branchy_app::apply_lines(graph, &lines)
         .map_err(|e| format!("line {}: {}", e.line, e.message))?;
-    store::save(path, &edit.graph).map_err(|e| e.to_string())?;
+    store::save_change(path, &edit.graph, &edit.undo).map_err(|e| e.to_string())?;
     if plain {
         return Ok(plain::made(&edit.made));
     }

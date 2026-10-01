@@ -9,7 +9,7 @@
 //! - [`edit`] — applying command lines as one change, and explaining a
 //!   refusal in words.
 //! - [`store`] — reading and writing the document, atomically, with an undo
-//!   stack twenty changes deep. Phase 3 replaces its body with Automerge behind
+//!   log twenty changes deep. Phase 3 replaces its body with Automerge behind
 //!   the same functions.
 //! - [`snapshot`] — the whole derived picture in one value, so a user interface
 //!   never recomputes status, tier or the queue for itself.
@@ -18,6 +18,7 @@
 //!   ones that the terminal and the window share.
 
 pub mod edit;
+mod history;
 pub mod snapshot;
 pub mod store;
 pub mod today;

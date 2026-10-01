@@ -379,7 +379,7 @@ fn undo_copies_live_in_the_vaults_own_folder() {
     store::save(&document, &graph_with(&["One"])).expect("saves");
     store::save(&document, &graph_with(&["One", "Two"])).expect("saves");
 
-    assert!(scratch.dir().join(".branchy/undo/graph.json.1").is_file());
+    assert!(scratch.dir().join(".branchy/undo/graph.json.log").is_file());
     let loose: Vec<String> = fs::read_dir(scratch.dir())
         .expect("lists")
         .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())

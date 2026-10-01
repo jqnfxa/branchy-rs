@@ -13,21 +13,20 @@ use std::path::{Path, PathBuf};
 use branchy_core::{Area, AreaId, Command, Date, Graph, Node, NodeId};
 use serde::{Deserialize, Serialize};
 
+use crate::history;
 use crate::vault::{DOCUMENT, Vaults};
 
 /// Bumped when the shape changes in a way an older reader could not cope with.
 const FORMAT_VERSION: u32 = 1;
 
-/// How many changes can be taken back.
-///
-/// Kept as whole documents rather than as a command log, because a document
-/// that will not parse can still be recovered by hand, and twenty copies of a
-/// planning graph cost nothing.
+/// How deep the stack left by versions up to 0.2.9 went: twenty whole copies
+/// of the document. Still read, so history from before the upgrade can be
+/// taken back; no longer written. The log in [`crate::history`] replaced it.
 const UNDO_DEPTH: usize = 20;
 
 /// State beside the document that belongs to this device alone, and that sync
-/// will leave out: the undo stack, for now.
-const LOCAL_DIR: &str = ".branchy";
+/// will leave out: the undo log, for now.
+pub(crate) const LOCAL_DIR: &str = ".branchy";
 
 /// One stored graph.
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,7 +54,7 @@ struct AreaRecord {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct NodeRecord {
+pub(crate) struct NodeRecord {
     id: u64,
     name: String,
     #[serde(default)]
@@ -68,6 +67,40 @@ struct NodeRecord {
     due: Option<String>,
     #[serde(default)]
     prereqs: Vec<u64>,
+}
+
+impl NodeRecord {
+    pub(crate) fn of(id: NodeId, node: &Node) -> Self {
+        Self {
+            id: id.raw(),
+            name: node.name.clone(),
+            note: node.note.clone(),
+            area: node.area.raw(),
+            priority: node.priority,
+            done: node.done,
+            due: node.due.map(|date| date.to_string()),
+            prereqs: node.prereqs.iter().copied().map(NodeId::raw).collect(),
+        }
+    }
+
+    /// The node, prerequisites and all.
+    pub(crate) fn into_node(self) -> Result<(NodeId, Node), StoreError> {
+        Ok((
+            NodeId::new(self.id),
+            Node {
+                name: self.name,
+                note: self.note,
+                area: AreaId::new(self.area),
+                priority: self.priority,
+                done: self.done,
+                due: match self.due {
+                    Some(text) => Some(text.parse::<Date>()?),
+                    None => None,
+                },
+                prereqs: self.prereqs.into_iter().map(NodeId::new).collect(),
+            },
+        ))
+    }
 }
 
 /// Anything that can go wrong reading or writing the document or the list of
@@ -102,6 +135,10 @@ pub enum StoreError {
     UnknownVault(String),
     /// More than one recent vault goes by that name.
     AmbiguousVault(String),
+    /// The document changed since Branchy last wrote it, by hand or by an
+    /// older build, so the undo history no longer fits it and was cleared.
+    /// Carries where the copy from before Branchy's last change is kept.
+    UndoStale(PathBuf),
 }
 
 impl std::fmt::Display for StoreError {
@@ -149,6 +186,13 @@ impl std::fmt::Display for StoreError {
                 f,
                 "more than one recent vault is called {name}; give its folder instead"
             ),
+            Self::UndoStale(previous) => write!(
+                f,
+                "the document was changed outside Branchy since its last change, so the \
+                 undo history no longer fits it and has been cleared. The document as it \
+                 was before Branchy's last change is kept in {}",
+                previous.display()
+            ),
         }
     }
 }
@@ -188,16 +232,7 @@ impl Document {
                 .collect(),
             nodes: graph
                 .nodes()
-                .map(|(id, node)| NodeRecord {
-                    id: id.raw(),
-                    name: node.name.clone(),
-                    note: node.note.clone(),
-                    area: node.area.raw(),
-                    priority: node.priority,
-                    done: node.done,
-                    due: node.due.map(|date| date.to_string()),
-                    prereqs: node.prereqs.iter().copied().map(NodeId::raw).collect(),
-                })
+                .map(|(id, node)| NodeRecord::of(id, node))
                 .collect(),
         }
     }
@@ -235,20 +270,11 @@ impl Document {
             .map(|n| (n.id, n.prereqs.clone()))
             .collect();
         for record in self.nodes {
+            let (id, mut node) = record.into_node()?;
+            node.prereqs = BTreeSet::new();
             graph.apply(Command::RestoreNode {
-                id: NodeId::new(record.id),
-                node: Box::new(Node {
-                    name: record.name,
-                    note: record.note,
-                    area: AreaId::new(record.area),
-                    priority: record.priority,
-                    done: record.done,
-                    due: match record.due {
-                        Some(text) => Some(text.parse::<Date>()?),
-                        None => None,
-                    },
-                    prereqs: BTreeSet::new(),
-                }),
+                id,
+                node: Box::new(node),
                 dependents: BTreeSet::new(),
             })?;
         }
@@ -386,7 +412,11 @@ pub fn load(path: &Path) -> Result<Graph, StoreError> {
     }
 }
 
-/// Writes the graph, pushing the previous contents onto the undo stack.
+/// Writes the graph, keeping the whole previous document to undo to.
+///
+/// For a document saved directly rather than edited by commands. An edit has
+/// its inverse commands and goes through [`save_change`], which keeps a few
+/// hundred bytes instead of a copy of the document.
 ///
 /// The new file is written beside the target and renamed over it, because a
 /// half-written document is exactly what a sync tool would happily propagate to
@@ -396,12 +426,49 @@ pub fn load(path: &Path) -> Result<Graph, StoreError> {
 ///
 /// [`StoreError::Io`] or [`StoreError::Json`].
 pub fn save(path: &Path, graph: &Graph) -> Result<(), StoreError> {
+    save_with(path, graph, None)
+}
+
+/// Writes the graph after an edit, recording the commands that take it back.
+///
+/// `undo` is what [`crate::apply_lines`] or `Graph::apply` returned for the
+/// edit, in the order to apply them.
+///
+/// # Errors
+///
+/// [`StoreError::Io`] or [`StoreError::Json`].
+pub fn save_change(path: &Path, graph: &Graph, undo: &[Command]) -> Result<(), StoreError> {
+    save_with(path, graph, Some(undo))
+}
+
+fn save_with(path: &Path, graph: &Graph, undo: Option<&[Command]>) -> Result<(), StoreError> {
     let path = &real_path(path);
     tidy_loose_undo(path)?;
-    if path.exists() {
-        push_undo(path)?;
-    }
     let text = serde_json::to_string_pretty(&Document::from_graph(graph))?;
+    let before = match fs::read_to_string(path) {
+        Ok(before) => Some(before),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(StoreError::Io(e)),
+    };
+    if let Some(before) = before {
+        let mut entries = history::read(path);
+        entries.push(history::Entry {
+            after: history::fingerprint(&text),
+            undo: undo
+                .map(|commands| commands.iter().map(history::Op::of).collect())
+                .unwrap_or_default(),
+            document: if undo.is_none() {
+                Some(before.clone())
+            } else {
+                None
+            },
+        });
+        // the log goes first: if the document write then fails, the newest
+        // entry no longer matches the document and undo says so, rather than
+        // applying inverses to a document they do not fit
+        replace_file(&history::previous_path(path), &before)?;
+        history::write(path, &entries)?;
+    }
     write_atomically(path, &text)?;
     Ok(())
 }
@@ -413,13 +480,66 @@ pub fn save(path: &Path, graph: &Graph) -> Result<(), StoreError> {
 /// re-entered by hand — which is the predictable half of the trade, and the
 /// reason the old toggle had to go.
 ///
+/// The log is used first. Once it is empty, a stack of whole copies left by a
+/// version before 0.2.10 is still taken back, oldest last.
+///
 /// # Errors
 ///
-/// [`StoreError::NothingToUndo`] when the stack is empty, otherwise
-/// [`StoreError::Io`].
+/// [`StoreError::NothingToUndo`] when there is no history,
+/// [`StoreError::UndoStale`] when the document changed outside Branchy since
+/// its last change, otherwise [`StoreError::Io`].
 pub fn undo(path: &Path) -> Result<(), StoreError> {
     let path = &real_path(path);
     tidy_loose_undo(path)?;
+    let mut entries = history::read(path);
+    let Some(entry) = entries.pop() else {
+        return undo_copy(path);
+    };
+
+    let current = fs::read_to_string(path).unwrap_or_default();
+    if history::fingerprint(&current) != entry.after {
+        history::write(path, &[])?;
+        return Err(StoreError::UndoStale(history::previous_path(path)));
+    }
+
+    let restored = if let Some(document) = entry.document {
+        let spent = read_document(path).map(|current| current.spent());
+        write_atomically(path, &document)?;
+        if let Some(spent) = spent {
+            keep_spent(path, spent)?;
+        }
+        fs::read_to_string(path)?
+    } else {
+        let commands = entry
+            .undo
+            .into_iter()
+            .map(history::Op::into_command)
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut graph = load(path)?;
+        // the fingerprint matched, so these are the inverses of exactly
+        // this document's last change and the graph has no reason to
+        // refuse them
+        graph
+            .apply_all(commands)
+            .map_err(|(error, _)| StoreError::Graph(error))?;
+        let text = serde_json::to_string_pretty(&Document::from_graph(&graph))?;
+        write_atomically(path, &text)?;
+        text
+    };
+
+    // The entry below recorded the text it left behind, and the text just
+    // written is that state again but not always byte for byte: the id
+    // counters stay where they were. Its inverses still fit, so it is
+    // re-stamped with what is really on disk now.
+    if let Some(below) = entries.last_mut() {
+        below.after = history::fingerprint(&restored);
+    }
+    history::write(path, &entries)?;
+    Ok(())
+}
+
+/// Takes back one whole copy from the stack left by a version before 0.2.10.
+fn undo_copy(path: &Path) -> Result<(), StoreError> {
     let newest = undo_path(path, 1);
     if !newest.exists() {
         return Err(StoreError::NothingToUndo);
@@ -472,14 +592,28 @@ fn read_document(path: &Path) -> Option<Document> {
 }
 
 /// How many changes could still be taken back.
+///
+/// A log that no longer fits the document counts as empty, since undo would
+/// only refuse it.
 #[must_use]
 pub fn undo_depth(path: &Path) -> usize {
     let path = &real_path(path);
     // best effort: failing to tidy only means counting the new place as empty
     let _ = tidy_loose_undo(path);
-    (1..=UNDO_DEPTH)
+    let entries = history::read(path);
+    let logged = match entries.last() {
+        Some(top)
+            if fs::read_to_string(path)
+                .is_ok_and(|current| history::fingerprint(&current) == top.after) =>
+        {
+            entries.len()
+        }
+        _ => 0,
+    };
+    let copies = (1..=UNDO_DEPTH)
         .take_while(|slot| undo_path(path, *slot).exists())
-        .count()
+        .count();
+    logged + copies
 }
 
 /// Where writes to `path` really have to go.
@@ -507,29 +641,9 @@ fn real_path(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-/// Moves the current document into slot 1, shifting the rest down and dropping
-/// whatever falls off the end.
-fn push_undo(path: &Path) -> Result<(), StoreError> {
-    let oldest = undo_path(path, UNDO_DEPTH);
-    if oldest.exists() {
-        fs::remove_file(&oldest)?;
-    }
-    for slot in (1..UNDO_DEPTH).rev() {
-        let from = undo_path(path, slot);
-        if from.exists() {
-            fs::rename(&from, undo_path(path, slot + 1))?;
-        }
-    }
-    let copy = undo_path(path, 1);
-    if let Some(dir) = copy.parent() {
-        fs::create_dir_all(dir)?;
-    }
-    fs::copy(path, copy)?;
-    Ok(())
-}
-
-/// `.branchy/undo/graph.json.1` for `graph.json`: out of sight, and named after
-/// the document so two documents in one folder keep separate stacks.
+/// `.branchy/undo/graph.json.1` for `graph.json`: where versions up to 0.2.9
+/// kept their stack of whole copies, named after the document so two
+/// documents in one folder keep separate stacks.
 fn undo_path(path: &Path, slot: usize) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(format!(".{slot}"));
