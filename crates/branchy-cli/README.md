@@ -70,7 +70,7 @@ A vault is a folder holding one graph, the way an Obsidian vault holds notes, so
 
 The window shares the list, so the terminal always works in the vault the window opened last.
 
-`branchy where` prints the document's path. `BRANCHY_FILE` pins every command to one file, bypassing vaults, and `--file` overrides even that. The document is plain JSON and worth keeping in version control. The `.branchy` folder beside it holds the undo stack and can be left out.
+`branchy where` prints the document's path. `BRANCHY_FILE` pins every command to one file, bypassing vaults, and `--file` overrides even that. The document is plain JSON and worth keeping in version control. The `.branchy` folder beside it holds this device's undo log and can be left out.
 
 ## There is a window too
 

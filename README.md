@@ -4,14 +4,14 @@ A dependency-aware, tree-alike TODO list. Break a goal into branches, unlock the
 
 ![The radial view: 121 tasks across six directions, finished work ringing the centre and the available frontier glowing around it](docs/images/radial-tree.png)
 
-> Status: the engine, a command line and a desktop window all work. Sync between devices is next.
+> Status: the engine, a command line, a desktop window and a kanban board all work, and the command line is built to be driven by AI agents as well as people. Sync between devices is next.
 
 ## Idea
 
 - Any item can depend on any other item, across branches, not only parent to child.
 - An item is **locked** until its prerequisites are done, **available** once they are, and **done** when finished.
 - A **deadline** on one item is inherited by everything it depends on, earliest wins. Date the goal and the whole chain leading to it is dated.
-- The **tree view** shows the whole graph like a game skill tree. The **queue view** lists only what is available, ordered by priority.
+- The **tree view** shows the whole graph like a game skill tree. The **queue view** lists only what is available, deadline first and then priority.
 - The **board** tracks work in hand: backlog, to do, doing, review, done. The backlog is split into what could start now and what is still locked, and only done unlocks what depends on a task.
 - One graph for everything: work features that block each other, hard skills, health, any long-term plan.
 
@@ -74,11 +74,19 @@ cd src-tauri && cargo build && ./target/debug/branchy-desktop
 
 It opens on your recent vaults, or straight into the last one if you tick the box. The same graph, drawn as a skill tree. Three layouts, a queue, a calendar and a board, search, task and direction editing, and the same command line behind `:` or Ctrl+K — press `?` there for every command with an example. Windowed, borderless or full screen with F11. Five themes, and the interface in English, Russian, German, Polish or Japanese.
 
+Press **B** for the board. Drag a card to another column, or pick its stage in the task's panel, which is the way to do it on a touchscreen. A locked task can be planned into To do but not started, and the columns that would refuse a card dim while you carry it.
+
+## Upgrading to 0.3
+
+0.3.0 replaced each task's done flag with a board stage, so the document format moved to version 2. Older versions refuse a version-2 document rather than save over it and lose the stages, so **update every copy of Branchy that opens a vault**, the window and the terminal alike, before or together with the first change made in 0.3. Documents from earlier versions load as they are and are converted on the first change.
+
+Undo is now a short log of the commands that take each change back, instead of twenty whole copies of the document. History from before the upgrade can still be undone; once you no longer need it, the old copies `.branchy/undo/graph.json.1` to `.20` can be deleted.
+
 ## Stack
 
 - Rust, Cargo workspace.
 - `crates/branchy-core`: graph, status, tiers, cycle handling, the command layer and its parser. No dependencies, no UI, no filesystem.
-- `crates/branchy-app`: persistence, and the snapshot a user interface draws.
+- `crates/branchy-app`: persistence and the undo log, applying command lines as one change, and the snapshot a user interface draws.
 - `crates/branchy-cli`: the `branchy` binary.
 - `ui/`: the frontend. Plain HTML, CSS and JavaScript, no build step.
 - `src-tauri/`: the desktop shell.
@@ -101,7 +109,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-CI runs the same three checks. Commit message rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
+CI runs the same three checks, on Linux and Windows, with whatever Rust is newest stable at the time. That can be newer than your own and bring new clippy lints, so if CI fails on code that passes locally, check with its version: `rustup toolchain install <version> --profile minimal --component clippy,rustfmt` and `cargo +<version> clippy --workspace --all-targets -- -D warnings`. Commit message rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
