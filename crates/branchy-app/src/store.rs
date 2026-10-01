@@ -626,7 +626,9 @@ pub fn undo_depth(path: &Path) -> usize {
 /// linking the document into a synced or version-controlled folder is exactly
 /// what people do with it.
 fn real_path(path: &Path) -> PathBuf {
-    if let Ok(resolved) = fs::canonicalize(path) {
+    // without Windows' `\\?\` prefix, which would otherwise reach messages
+    // that name a file beside the document
+    if let Ok(resolved) = crate::vault::canonical(path) {
         return resolved;
     }
     // a link whose target does not exist yet: create the target, keep the link

@@ -416,7 +416,7 @@ fn name_of(dir: &Path) -> String {
 
 /// `fs::canonicalize`, without the `\\?\` prefix it adds on Windows, which
 /// would otherwise end up in the list and on screen.
-fn canonical(path: &Path) -> Result<PathBuf, StoreError> {
+pub(crate) fn canonical(path: &Path) -> Result<PathBuf, StoreError> {
     let full = fs::canonicalize(path)?;
     #[cfg(windows)]
     {

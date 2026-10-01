@@ -141,7 +141,13 @@ fn a_document_changed_outside_branchy_is_not_undone_into() {
     assert_eq!(store::undo_depth(&scratch.document()), 0);
     match store::undo(&scratch.document()) {
         Err(StoreError::UndoStale(previous)) => {
-            assert_eq!(previous, scratch.undo_dir().join("graph.json.prev"));
+            let kept = Path::new(".branchy").join("undo").join("graph.json.prev");
+            assert!(previous.ends_with(&kept), "{}", previous.display());
+            assert!(
+                !previous.to_string_lossy().contains(r"\\?\"),
+                "{}",
+                previous.display()
+            );
             assert!(fs::read_to_string(previous).expect("kept").contains("One"));
         }
         other => panic!("expected a stale history, got {other:?}"),
