@@ -186,7 +186,7 @@ fn run(cli: &Cli) -> Result<String, String> {
         _ => {}
     }
 
-    let mut graph = load(&path)?;
+    let graph = load(&path)?;
 
     match &cli.command {
         Cmd::Queue => return Ok(render::queue(&graph)),
@@ -249,12 +249,12 @@ fn run(cli: &Cli) -> Result<String, String> {
         | Cmd::Vault { .. } => unreachable!("handled above"),
     };
 
-    let command = branchy_core::parse(&graph, &line).map_err(|e| e.to_string())?;
-    let applied = graph.apply(command).map_err(|e| describe(&graph, &e))?;
+    let edit = branchy_app::apply_lines(graph, &[line]).map_err(|e| e.to_string())?;
+    let graph = edit.graph;
     store::save(&path, &graph).map_err(|e| e.to_string())?;
 
     let mut out = String::new();
-    if let Some(id) = applied.node {
+    if let Some(id) = edit.node {
         if let Some(node) = graph.node(id) {
             let status = graph.status(id).unwrap_or(Status::Locked);
             let _ = writeln!(
@@ -355,29 +355,6 @@ fn tally(graph: &Graph) -> String {
         let _ = write!(line, ", {overdue} overdue");
     }
     line
-}
-
-/// Errors from the graph carry ids; a person wants names.
-fn describe(graph: &Graph, error: &branchy_core::Error) -> String {
-    let name = |id: branchy_core::NodeId| {
-        graph
-            .node(id)
-            .map_or_else(|| id.to_string(), |node| node.name.clone())
-    };
-    match error {
-        branchy_core::Error::WouldCycle { path, .. } => {
-            let loop_text: Vec<String> = path.iter().map(|id| name(*id)).collect();
-            format!(
-                "refused, that would create a cycle: {}",
-                loop_text.join(" -> ")
-            )
-        }
-        branchy_core::Error::NotAPrerequisite {
-            dependent,
-            prerequisite,
-        } => format!("{} does not need {}", name(*dependent), name(*prerequisite)),
-        other => other.to_string(),
-    }
 }
 
 fn parse_status(word: &str) -> Result<Status, String> {

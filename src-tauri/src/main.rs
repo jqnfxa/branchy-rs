@@ -68,22 +68,12 @@ impl Session {
     /// it accepts, so each line goes to the parser and any refusal comes
     /// straight back.
     fn execute_all(&self, lines: &[String]) -> Result<Outcome, String> {
-        let mut graph = self.load()?;
-        let mut node = None;
-        let mut area = None;
-
-        for line in lines {
-            let command = branchy_core::parse(&graph, line).map_err(|e| e.to_string())?;
-            let applied = graph.apply(command).map_err(|e| describe(&graph, &e))?;
-            node = applied.node.or(node);
-            area = applied.area.or(area);
-        }
-
-        store::save(&self.path, &graph).map_err(|e| e.to_string())?;
+        let edit = branchy_app::apply_lines(self.load()?, lines).map_err(|e| e.to_string())?;
+        store::save(&self.path, &edit.graph).map_err(|e| e.to_string())?;
         Ok(Outcome {
-            node: node.map(|id| id.to_string()),
-            area: area.map(|id| id.to_string()),
-            snapshot: Snapshot::of(&graph),
+            node: edit.node.map(|id| id.to_string()),
+            area: edit.area.map(|id| id.to_string()),
+            snapshot: Snapshot::of(&edit.graph),
         })
     }
 
@@ -321,30 +311,6 @@ impl Desk {
 /// Shared across commands. Tauri runs them on a thread pool, so the lock is not
 /// decoration: without it two quick clicks could interleave a read and a write.
 struct Shared(Mutex<Desk>);
-
-/// Graph errors carry ids; a person wants names. The frontend has the snapshot
-/// and could resolve them, but the refusal has to read well even in a log.
-fn describe(graph: &Graph, error: &branchy_core::Error) -> String {
-    let name = |id: branchy_core::NodeId| {
-        graph
-            .node(id)
-            .map_or_else(|| id.to_string(), |node| node.name.clone())
-    };
-    match error {
-        branchy_core::Error::WouldCycle { path, .. } => {
-            let loop_text: Vec<String> = path.iter().map(|id| name(*id)).collect();
-            format!(
-                "Refused: that would create a cycle. {}",
-                loop_text.join(" \u{2192} ")
-            )
-        }
-        branchy_core::Error::NotAPrerequisite {
-            dependent,
-            prerequisite,
-        } => format!("{} does not need {}", name(*dependent), name(*prerequisite)),
-        other => other.to_string(),
-    }
-}
 
 // `State<'_, T>` by value, and an owned value for a deserialized argument, are
 // what `#[tauri::command]` requires. Clippy is right in general and wrong here:
