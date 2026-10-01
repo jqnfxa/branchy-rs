@@ -766,6 +766,8 @@
     stage.addEventListener(
       "wheel",
       function (ev) {
+        // the panels over the stage scroll; only the canvas zooms
+        if (ev.target.closest(".queue")) return;
         ev.preventDefault();
         zoomAt(ev.clientX - stageBox.left, ev.clientY - stageBox.top, Math.exp(-ev.deltaY * 0.0016));
       },
@@ -775,6 +777,7 @@
     // two fingers on a touchscreen: Android is a target, so this is not optional
     var pinch = null;
     stage.addEventListener("touchstart", function (ev) {
+      if (ev.target.closest(".queue")) return;
       if (ev.touches.length === 2) {
         pinch = spread(ev.touches);
         if (animation) cancelAnimationFrame(animation);
