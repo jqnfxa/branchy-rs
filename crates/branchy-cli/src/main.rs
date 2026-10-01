@@ -9,6 +9,7 @@ mod render;
 use branchy_app::{StoreError, Vault, Vaults, snapshot, store};
 
 use std::fmt::Write as _;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -140,12 +141,29 @@ enum VaultCmd {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(&cli) {
-        Ok(output) => {
-            print!("{output}");
-            ExitCode::SUCCESS
-        }
+        Ok(output) => emit(&output),
         Err(message) => {
             eprintln!("branchy: {message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Writes the output, treating a reader that stopped listening as success.
+///
+/// `print!` panics when stdout is a pipe whose reader has gone, which is what
+/// `branchy queue | head` does as soon as it has its lines. Nothing went wrong
+/// there: the reader got everything it asked for.
+fn emit(output: &str) -> ExitCode {
+    let mut stdout = std::io::stdout().lock();
+    match stdout
+        .write_all(output.as_bytes())
+        .and_then(|()| stdout.flush())
+    {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("branchy: {e}");
             ExitCode::FAILURE
         }
     }

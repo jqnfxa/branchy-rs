@@ -479,6 +479,45 @@ fn a_document_without_counters_continues_from_its_highest_id() {
     assert!(run(&scratch, &["add", "New task"]).contains("n5"));
 }
 
+// ── output to a reader that stops early ─────────────────────────────────
+
+#[test]
+fn a_reader_closing_the_pipe_is_not_a_crash() {
+    use std::process::Stdio;
+
+    // far more output than a pipe buffers, so the write has to meet the
+    // closed end rather than fitting into the buffer before it closes
+    let scratch = Scratch::new("broken-pipe");
+    let nodes: Vec<String> = (0..2000)
+        .map(|i| {
+            format!(r#"{{"id":{i},"name":"Task number {i}","area":0,"priority":5,"done":false}}"#)
+        })
+        .collect();
+    std::fs::write(
+        scratch.path(),
+        format!(
+            r##"{{"version":1,"areas":[{{"id":0,"name":"Work","color":"#4fd1c5"}}],"nodes":[{}]}}"##,
+            nodes.join(",")
+        ),
+    )
+    .expect("write");
+
+    let mut child = Command::new(binary())
+        .arg("--file")
+        .arg(scratch.path())
+        .arg("snapshot")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("binary runs");
+    // what `branchy snapshot | head -1` does once it has its line
+    drop(child.stdout.take());
+    let output = child.wait_with_output().expect("binary exits");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stderr.is_empty(), "{stderr}");
+}
+
 // ── a document reached through a symlink ────────────────────────────────
 
 #[cfg(unix)]
