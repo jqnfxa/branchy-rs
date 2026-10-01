@@ -26,8 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       number: ${{ steps.version.outputs.number }}
+      latest: ${{ steps.latest.outputs.latest }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # every tag, so this one can be compared with the others
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: The tag has to match the version being shipped
         id: version
@@ -42,6 +47,20 @@ jobs:
           fi
           # the tag carries a v, the package filename does not
           echo "number=$tag" >> "$GITHUB_OUTPUT"
+
+      # GitHub marks whichever release was published last as Latest. Tags
+      # pushed together race, and in 0.3.0 the 0.2.10 run finished after the
+      # 0.3.0 one and took the label. So only the highest version claims it.
+      - name: Only the highest version becomes Latest
+        id: latest
+        run: |
+          highest=$(git tag --list 'v*' | sort -V | tail -n 1)
+          echo "this tag: $GITHUB_REF_NAME, highest: $highest"
+          if [ "$GITHUB_REF_NAME" = "$highest" ]; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+          fi
 
   linux:
     name: .deb and AppImage
@@ -177,6 +196,7 @@ jobs:
           name: Branchy ${{ github.ref_name }}
           files: artifacts/*/*
           fail_on_unmatched_files: true
+          make_latest: ${{ needs.check.outputs.latest }}
           body: |
             ## Install
 
