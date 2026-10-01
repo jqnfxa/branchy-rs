@@ -23,7 +23,13 @@ const GUIDE: &str = include_str!("guide.txt");
 
 /// Dependency-aware task tree.
 #[derive(Debug, Parser)]
-#[command(name = "branchy", version, about, long_about = None)]
+#[command(
+    name = "branchy",
+    version,
+    about,
+    long_about = None,
+    after_help = "Scripts and AI agents: run `branchy guide` first, and pass --plain."
+)]
 struct Cli {
     /// Document to work on, bypassing vaults altogether.
     #[arg(long, short, global = true, conflicts_with = "vault")]

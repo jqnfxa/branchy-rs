@@ -1201,3 +1201,12 @@ fn find_says_how_much_a_limit_left_out() {
     assert!(out.starts_with("# 1 of 3 matching"), "{out}");
     assert!(run(&scratch, &["find", "nothing like it"]).contains("Nothing matches"));
 }
+
+#[test]
+fn help_points_agents_at_the_guide() {
+    let output = Command::new(binary())
+        .arg("--help")
+        .output()
+        .expect("binary runs");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("branchy guide"));
+}

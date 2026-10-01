@@ -47,7 +47,7 @@ $ branchy --plain queue --limit 10            # available now, most urgent first
 $ branchy --plain board --limit 5             # every column; backlog and done cut to 5
 $ branchy --plain list --stage doing          # what is being worked on
 $ branchy --plain list --status locked --limit 20
-$ branchy --plain tree                        # every task, by direction and tier
+$ branchy --plain tree                        # EVERY task: costly on a big graph
 $ branchy --plain show n2                     # one task, what it unlocks, its note
 $ branchy --plain why n2                      # what has to be done first, in order
 $ branchy --plain calendar --limit 10         # deadlines, soonest first
@@ -72,5 +72,7 @@ EOF
 A refused line is reported by number and nothing is applied. On success
 it prints what was created: a2 $m, then n4 $mech, then n5.
 
-Avoid reading graph.json directly, and avoid snapshot: it carries every
-note and is meant for user interfaces.
+Keep reads small. Unfiltered list and tree print every task, about 20k
+tokens on a 900-task graph: use find, --limit, --area, --status or --stage
+instead. Avoid reading graph.json directly, and avoid snapshot: it carries
+every note and is meant for user interfaces.
