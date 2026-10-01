@@ -93,7 +93,7 @@ fn undo_is_a_stack_that_runs_out() {
     assert_eq!(names(&scratch.document()), ["One"]);
     // the first save of a new document had nothing before it to keep
     store::undo(&scratch.document()).expect("undoes the first edit");
-    assert!(names(&scratch.document()).is_empty());
+    assert_eq!(names(&scratch.document()), Vec::<String>::new());
     assert!(matches!(
         store::undo(&scratch.document()),
         Err(StoreError::NothingToUndo)
@@ -179,7 +179,7 @@ fn a_stack_from_before_the_log_is_taken_back_after_it() {
     store::undo(&document).expect("undoes the logged change");
     assert_eq!(names(&document), ["Old"]);
     store::undo(&document).expect("undoes the old copy");
-    assert!(names(&document).is_empty());
+    assert_eq!(names(&document), Vec::<String>::new());
 }
 
 /// Creates a document by edits without any history before it.

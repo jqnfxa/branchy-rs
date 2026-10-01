@@ -697,7 +697,7 @@ mod tests {
 
         let view = desk.forget(&path).expect("forgets");
         assert!(view.open.is_none());
-        assert!(view.recent.is_empty());
+        assert_eq!(view.recent, []);
         assert!(scratch.dir().join("Work/graph.json").is_file());
     }
 

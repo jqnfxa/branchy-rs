@@ -170,7 +170,7 @@ fn a_file_or_a_missing_folder_is_not_a_vault() {
 fn a_missing_list_reads_as_empty() {
     let scratch = Scratch::new("list-empty");
     let list = Vaults::load(&scratch.list()).expect("loads");
-    assert!(list.recent().is_empty());
+    assert_eq!(list.recent(), Vec::<PathBuf>::new());
     assert!(list.current().is_none());
     assert!(
         !list.open_last(),
@@ -272,7 +272,7 @@ fn forgetting_a_vault_takes_it_off_the_list_and_leaves_its_folder() {
     // by folder as well as by name, which is what the window sends
     let path = work.dir().display().to_string();
     list.forget(&path).expect("forgets by path");
-    assert!(list.recent().is_empty());
+    assert_eq!(list.recent(), Vec::<PathBuf>::new());
     assert!(matches!(
         list.forget("Work"),
         Err(StoreError::UnknownVault(_))
@@ -355,7 +355,7 @@ fn nothing_is_adopted_from_a_folder_without_a_graph() {
     let legacy = scratch.dir().join("data");
     fs::create_dir(&legacy).expect("mkdir");
     let list = Vaults::load_or_adopt(&scratch.list(), &legacy).expect("loads");
-    assert!(list.recent().is_empty());
+    assert_eq!(list.recent(), Vec::<PathBuf>::new());
 }
 
 #[test]
@@ -369,7 +369,7 @@ fn adoption_happens_once_so_a_forgotten_vault_stays_forgotten() {
     list.save().expect("saves");
 
     let again = Vaults::load_or_adopt(&scratch.list(), &legacy).expect("reloads");
-    assert!(again.recent().is_empty());
+    assert_eq!(again.recent(), Vec::<PathBuf>::new());
 }
 
 #[test]
@@ -490,7 +490,10 @@ fn two_sets_of_directories_keep_separate_lists() {
     first.save().expect("saves");
 
     // the point of injecting them: nothing is shared through the environment
-    assert!(Vaults::for_dirs(&two).expect("loads").recent().is_empty());
+    assert_eq!(
+        Vaults::for_dirs(&two).expect("loads").recent(),
+        Vec::<PathBuf>::new()
+    );
 }
 
 #[test]

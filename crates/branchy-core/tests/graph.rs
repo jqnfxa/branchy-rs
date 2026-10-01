@@ -26,8 +26,8 @@ fn new_graph_is_empty() {
     assert!(graph.is_empty());
     assert_eq!(graph.node_count(), 0);
     assert_eq!(graph.area_count(), 0);
-    assert!(graph.queue().is_empty());
-    assert!(graph.find_cycles().is_empty());
+    assert_eq!(graph.queue(), []);
+    assert_eq!(graph.find_cycles(), Vec::<Vec<NodeId>>::new());
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn a_diamond_is_not_a_cycle() {
     graph.add_prerequisite(ids["d"], ids["b"]).expect("acyclic");
     graph.add_prerequisite(ids["d"], ids["c"]).expect("acyclic");
 
-    assert!(graph.find_cycles().is_empty());
+    assert_eq!(graph.find_cycles(), Vec::<Vec<NodeId>>::new());
     assert_eq!(graph.tier(ids["d"]), Some(2));
 }
 
@@ -258,7 +258,7 @@ fn a_merged_cycle_is_tolerated_and_reported() {
     graph
         .remove_prerequisite(ids["a"], ids["b"])
         .expect("edge is there");
-    assert!(graph.find_cycles().is_empty());
+    assert_eq!(graph.find_cycles(), Vec::<Vec<NodeId>>::new());
     assert_eq!(graph.status(ids["a"]), Some(Status::Available));
 }
 
@@ -396,7 +396,7 @@ fn path_to_unlock_lists_the_work_in_order() {
 #[test]
 fn path_to_unlock_is_empty_for_something_already_available() {
     let (graph, ids) = fixture(&["a"]);
-    assert!(graph.path_to_unlock(ids["a"]).expect("no cycle").is_empty());
+    assert_eq!(graph.path_to_unlock(ids["a"]).expect("no cycle"), []);
 }
 
 #[test]
@@ -412,12 +412,7 @@ fn path_to_unlock_does_not_walk_past_finished_work() {
         .expect("acyclic");
     graph.set_done(ids["done_one"], true).expect("exists");
 
-    assert!(
-        graph
-            .path_to_unlock(ids["buried"])
-            .expect("no cycle")
-            .is_empty()
-    );
+    assert_eq!(graph.path_to_unlock(ids["buried"]).expect("no cycle"), []);
 }
 
 #[test]
