@@ -1,6 +1,7 @@
 //! Everything that can go wrong in the graph.
 
 use crate::id::{AreaId, NodeId};
+use crate::node::Status;
 
 /// An operation the graph refused.
 ///
@@ -44,6 +45,14 @@ pub enum Error {
     CycleBlocks(NodeId),
     /// A date the calendar does not have, or one not written as `YYYY-MM-DD`.
     BadDate(String),
+    /// A task cannot be started, moved from backlog or todo into doing or
+    /// review, while something it needs is unfinished.
+    NotStartable {
+        /// The task.
+        node: NodeId,
+        /// Its status, which is not available.
+        status: Status,
+    },
 }
 
 impl std::fmt::Display for Error {
@@ -77,6 +86,11 @@ impl std::fmt::Display for Error {
             }
             Self::CycleBlocks(id) => write!(f, "{id} is blocked by a dependency cycle"),
             Self::BadDate(text) => write!(f, "not a date: {text}, expected YYYY-MM-DD"),
+            Self::NotStartable { node, status } => write!(
+                f,
+                "{node} cannot be started while it is {}: finish what it needs first",
+                format!("{status:?}").to_lowercase()
+            ),
         }
     }
 }

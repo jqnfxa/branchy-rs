@@ -1,7 +1,7 @@
 //! The command layer: applying, undoing, and parsing text into commands.
 
 use branchy_core::{
-    AreaId, Command, Error, Graph, Labels, NewArea, NewNode, NodeId, ParseError, Status,
+    AreaId, Command, Error, Graph, Labels, NewArea, NewNode, NodeId, ParseError, Stage, Status,
 };
 
 /// A graph with one area named "Hard skills" and the given nodes.
@@ -133,12 +133,12 @@ fn add_node_referring_to_a_missing_node_is_refused() {
 // ── undo ─────────────────────────────────────────────────────────────────
 
 #[test]
-fn undo_of_set_done_restores_the_old_value() {
+fn undo_of_a_stage_change_restores_the_old_stage() {
     let (mut graph, _, ids) = fixture(&["a"]);
     let applied = graph
-        .apply(Command::SetDone {
+        .apply(Command::SetStage {
             node: ids[0],
-            done: true,
+            stage: Stage::Done,
         })
         .expect("exists");
     assert_eq!(graph.status(ids[0]), Some(Status::Done));
@@ -274,9 +274,9 @@ fn a_failing_sequence_reports_what_had_already_happened() {
                 node: ids[0],
                 priority: 9,
             },
-            Command::SetDone {
+            Command::SetStage {
                 node: ghost,
-                done: true,
+                stage: Stage::Done,
             },
         ])
         .unwrap_err();
@@ -342,16 +342,16 @@ fn simple_verbs_parse() {
     let (graph, _, ids) = fixture(&["algebra"]);
     assert_eq!(
         parse(&graph, "done algebra"),
-        Command::SetDone {
+        Command::SetStage {
             node: ids[0],
-            done: true
+            stage: Stage::Done
         }
     );
     assert_eq!(
         parse(&graph, "undone algebra"),
-        Command::SetDone {
+        Command::SetStage {
             node: ids[0],
-            done: false
+            stage: Stage::Backlog
         }
     );
     assert_eq!(parse(&graph, "rm algebra"), Command::RemoveNode(ids[0]));
@@ -632,4 +632,58 @@ fn a_single_line_does_not_accept_a_label() {
     let (graph, _, _) = fixture(&[]);
     let refused = branchy_core::parse(&graph, "$x = add Calculus").unwrap_err();
     assert_eq!(refused, ParseError::UnknownVerb("$x".to_string()));
+}
+
+// ── stages ───────────────────────────────────────────────────────────────
+
+#[test]
+fn every_stage_has_a_verb() {
+    let (graph, _, ids) = fixture(&["algebra"]);
+    for (line, stage) in [
+        ("todo algebra", Stage::Todo),
+        ("start algebra", Stage::Doing),
+        ("review algebra", Stage::Review),
+        ("done algebra", Stage::Done),
+        ("undone algebra", Stage::Backlog),
+        ("stage algebra doing", Stage::Doing),
+        ("stage algebra BACKLOG", Stage::Backlog),
+    ] {
+        assert_eq!(
+            parse(&graph, line),
+            Command::SetStage {
+                node: ids[0],
+                stage
+            },
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn a_stage_that_is_not_one_is_refused() {
+    let (graph, _, _) = fixture(&["algebra"]);
+    assert_eq!(
+        branchy_core::parse(&graph, "stage algebra closed"),
+        Err(ParseError::BadStage("closed".to_string()))
+    );
+    assert_eq!(
+        branchy_core::parse(&graph, "stage doing"),
+        Err(ParseError::MissingTask)
+    );
+}
+
+#[test]
+fn undo_puts_a_task_back_in_doing_even_once_it_is_locked() {
+    let (mut graph, _, ids) = fixture(&["a", "b"]);
+    run(&mut graph, "link b after a");
+    run(&mut graph, "done a");
+    run(&mut graph, "start b");
+    run(&mut graph, "undone a");
+    let applied = graph
+        .apply(parse(&graph, "done b"))
+        .expect("anything may be marked done");
+    // b is locked again, and starting it would be refused, but taking back
+    // "done" has to return it to where it was
+    graph.apply_all(applied.undo).expect("undo applies");
+    assert_eq!(graph.node(ids[1]).expect("exists").stage, Stage::Doing);
 }

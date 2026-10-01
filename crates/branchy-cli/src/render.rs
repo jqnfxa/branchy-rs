@@ -210,7 +210,7 @@ pub fn area_progress(graph: &Graph, area: branchy_core::AreaId) -> (usize, usize
     let held: Vec<bool> = graph
         .nodes()
         .filter(|(_, node)| node.area == area)
-        .map(|(_, node)| node.done)
+        .map(|(_, node)| node.is_done())
         .collect();
     (held.iter().filter(|done| **done).count(), held.len())
 }
@@ -266,7 +266,7 @@ pub fn list(
 
         let done = graph
             .nodes()
-            .filter(|(_, n)| n.area == area_id && n.done)
+            .filter(|(_, n)| n.area == area_id && n.is_done())
             .count();
         let total = graph.nodes().filter(|(_, n)| n.area == area_id).count();
         let _ = writeln!(out, "\n{}  {done}/{total}", area.name);
@@ -321,7 +321,7 @@ pub fn tree(graph: &Graph) -> String {
 
         let done = rows
             .iter()
-            .filter(|id| graph.node(**id).is_some_and(|n| n.done))
+            .filter(|id| graph.node(**id).is_some_and(branchy_core::Node::is_done))
             .count();
         let _ = writeln!(
             out,
@@ -451,7 +451,7 @@ pub fn show(graph: &Graph, id: NodeId) -> String {
         out.push_str("    nothing, this is a starting point\n");
     } else {
         for prereq in &node.prereqs {
-            let met = graph.node(*prereq).is_some_and(|n| n.done);
+            let met = graph.node(*prereq).is_some_and(branchy_core::Node::is_done);
             let _ = writeln!(
                 out,
                 "    [{}] {:<6} {}",

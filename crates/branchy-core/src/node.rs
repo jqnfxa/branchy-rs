@@ -50,8 +50,9 @@ pub struct Node {
     pub area: AreaId,
     /// Higher sorts earlier in the queue.
     pub priority: u8,
-    /// Whether the task is finished. The only stored part of a node's status.
-    pub done: bool,
+    /// Where the task stands on the board. The only stored part of a node's
+    /// status: [`Stage::Done`] is what "done" means everywhere else.
+    pub stage: Stage,
     /// When this has to be finished by, if anything says so.
     ///
     /// A deadline does not change a node's status: a task is not blocked by
@@ -64,6 +65,83 @@ pub struct Node {
     /// construction, and set union is what merges correctly when two devices
     /// each add a different prerequisite offline.
     pub prereqs: BTreeSet<NodeId>,
+}
+
+impl Node {
+    /// Whether the task is finished, which is what unlocks what needs it.
+    #[must_use]
+    pub fn is_done(&self) -> bool {
+        self.stage == Stage::Done
+    }
+}
+
+/// Where a task stands on the board.
+///
+/// Stored, unlike [`Status`], because nothing in the graph can work it out:
+/// whether someone has picked a task, is working on it, or is waiting for it
+/// to be checked is a fact about people, not about edges. Status and stage
+/// answer different questions and both are shown. Status says whether the
+/// task *can* be worked on; stage says what is being done about it.
+///
+/// Only [`Stage::Done`] unlocks the tasks that need this one. A task in
+/// review is not finished, so what depends on it waits.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Stage {
+    /// Not picked yet. Where every task starts.
+    #[default]
+    Backlog,
+    /// Picked to be done next. A locked task may be planned in here ahead of
+    /// its prerequisites.
+    Todo,
+    /// Being worked on. Only an available task can be started.
+    Doing,
+    /// Finished, waiting to be checked. Does not unlock anything yet.
+    Review,
+    /// Finished.
+    Done,
+}
+
+impl Stage {
+    /// Every stage, in board order.
+    pub const ALL: [Self; 5] = [
+        Self::Backlog,
+        Self::Todo,
+        Self::Doing,
+        Self::Review,
+        Self::Done,
+    ];
+
+    /// The word the grammar, the document and the interface use.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Backlog => "backlog",
+            Self::Todo => "todo",
+            Self::Doing => "doing",
+            Self::Review => "review",
+            Self::Done => "done",
+        }
+    }
+
+    /// The stage a word names, ignoring case.
+    #[must_use]
+    pub fn from_name(word: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|stage| stage.name().eq_ignore_ascii_case(word))
+    }
+
+    /// Doing or review: someone has begun it.
+    #[must_use]
+    pub const fn is_started(self) -> bool {
+        matches!(self, Self::Doing | Self::Review)
+    }
+}
+
+impl std::fmt::Display for Stage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
 }
 
 /// The fields a caller supplies when creating a node.

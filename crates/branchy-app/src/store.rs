@@ -10,14 +10,18 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use branchy_core::{Area, AreaId, Command, Date, Graph, Node, NodeId};
+use branchy_core::{Area, AreaId, Command, Date, Graph, Node, NodeId, Stage};
 use serde::{Deserialize, Serialize};
 
 use crate::history;
 use crate::vault::{DOCUMENT, Vaults};
 
 /// Bumped when the shape changes in a way an older reader could not cope with.
-const FORMAT_VERSION: u32 = 1;
+///
+/// 2, in 0.3.0: a task's `stage` replaced its `done` flag. A format-1 reader
+/// would have read every started task as not done and saved the stages away,
+/// so a format-2 document is refused by it instead. Format 1 is still read.
+const FORMAT_VERSION: u32 = 2;
 
 /// How deep the stack left by versions up to 0.2.9 went: twenty whole copies
 /// of the document. Still read, so history from before the upgrade can be
@@ -61,6 +65,12 @@ pub(crate) struct NodeRecord {
     note: String,
     area: u64,
     priority: u8,
+    /// Where the task stands on the board. Absent in format 1, which had only
+    /// `done`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stage: Option<String>,
+    /// Format 1's whole idea of a stage. Read, never written.
+    #[serde(default, skip_serializing)]
     done: bool,
     /// Absent in documents written before deadlines existed, hence the default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -77,7 +87,8 @@ impl NodeRecord {
             note: node.note.clone(),
             area: node.area.raw(),
             priority: node.priority,
-            done: node.done,
+            stage: Some(node.stage.name().to_string()),
+            done: false,
             due: node.due.map(|date| date.to_string()),
             prereqs: node.prereqs.iter().copied().map(NodeId::raw).collect(),
         }
@@ -92,7 +103,16 @@ impl NodeRecord {
                 note: self.note,
                 area: AreaId::new(self.area),
                 priority: self.priority,
-                done: self.done,
+                stage: match self.stage {
+                    Some(word) => {
+                        Stage::from_name(&word).ok_or(StoreError::Unreadable(format!(
+                            "task n{} has the stage \"{word}\", which this build does not know",
+                            self.id
+                        )))?
+                    }
+                    None if self.done => Stage::Done,
+                    None => Stage::Backlog,
+                },
                 due: match self.due {
                     Some(text) => Some(text.parse::<Date>()?),
                     None => None,
@@ -114,6 +134,8 @@ pub enum StoreError {
     Json(serde_json::Error),
     /// The file was written by a newer version of Branchy.
     Version(u32),
+    /// The file parses but holds a value this build cannot use.
+    Unreadable(String),
     /// The stored graph is not internally consistent.
     Graph(branchy_core::Error),
     /// There is nothing to undo.
@@ -146,6 +168,7 @@ impl std::fmt::Display for StoreError {
         match self {
             Self::Io(e) => write!(f, "{e}"),
             Self::Json(e) => write!(f, "the file is not valid Branchy JSON: {e}"),
+            Self::Unreadable(what) => write!(f, "the file cannot be read: {what}"),
             Self::Version(v) => write!(
                 f,
                 "the file was written by a newer Branchy (format {v}, this build reads {FORMAT_VERSION})"

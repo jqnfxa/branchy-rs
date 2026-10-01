@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use branchy_core::{AreaId, Error, Graph, NewArea, NewNode, NodeId, Status};
+use branchy_core::{AreaId, Error, Graph, NewArea, NewNode, NodeId, Stage, Status};
 
 /// A graph with one area and the named nodes, none of them done.
 fn fixture(names: &[&str]) -> (Graph, BTreeMap<String, NodeId>) {
@@ -37,7 +37,7 @@ fn added_node_is_retrievable_and_starts_locked_free() {
     let node = graph.node(a).expect("just added");
     assert_eq!(node.name, "a");
     assert_eq!(node.priority, 5);
-    assert!(!node.done);
+    assert_eq!(node.stage, Stage::Backlog);
     assert!(node.prereqs.is_empty());
     // nothing to wait for, so it is immediately available
     assert_eq!(graph.status(a), Some(Status::Available));
@@ -456,4 +456,115 @@ fn errors_render_readably() {
         err.to_string(),
         "n0 cannot need n1: that closes a cycle n1 -> n0 -> n1"
     );
+}
+
+// ── the board ────────────────────────────────────────────────────────────
+
+#[test]
+fn a_locked_task_cannot_be_started() {
+    let (mut graph, ids) = fixture(&["a", "b"]);
+    graph.add_prerequisite(ids["b"], ids["a"]).expect("no loop");
+    assert_eq!(
+        graph.set_stage(ids["b"], Stage::Doing),
+        Err(Error::NotStartable {
+            node: ids["b"],
+            status: Status::Locked
+        })
+    );
+    assert_eq!(
+        graph.set_stage(ids["b"], Stage::Review),
+        Err(Error::NotStartable {
+            node: ids["b"],
+            status: Status::Locked
+        })
+    );
+    // planning it ahead is fine, and so is marking it done
+    graph
+        .set_stage(ids["b"], Stage::Todo)
+        .expect("may be planned");
+    graph
+        .set_stage(ids["b"], Stage::Done)
+        .expect("may be marked done");
+}
+
+#[test]
+fn a_started_task_stays_put_when_a_prerequisite_is_reopened() {
+    let (mut graph, ids) = fixture(&["a", "b"]);
+    graph.add_prerequisite(ids["b"], ids["a"]).expect("no loop");
+    graph.set_done(ids["a"], true).expect("exists");
+    graph.set_stage(ids["b"], Stage::Doing).expect("available");
+    graph.set_done(ids["a"], false).expect("exists");
+    assert_eq!(graph.node(ids["b"]).expect("exists").stage, Stage::Doing);
+    assert_eq!(graph.status(ids["b"]), Some(Status::Locked));
+    // and moving between started stages is not starting it again
+    graph
+        .set_stage(ids["b"], Stage::Review)
+        .expect("already started");
+}
+
+#[test]
+fn review_does_not_unlock_what_depends_on_it() {
+    let (mut graph, ids) = fixture(&["a", "b"]);
+    graph.add_prerequisite(ids["b"], ids["a"]).expect("no loop");
+    graph.set_stage(ids["a"], Stage::Review).expect("available");
+    assert_eq!(graph.status(ids["b"]), Some(Status::Locked));
+    graph.set_stage(ids["a"], Stage::Done).expect("exists");
+    assert_eq!(graph.status(ids["b"]), Some(Status::Available));
+}
+
+#[test]
+fn the_board_puts_every_task_in_one_column() {
+    let (mut graph, ids) = fixture(&["ready", "locked", "planned", "busy", "check", "finished"]);
+    graph
+        .add_prerequisite(ids["locked"], ids["ready"])
+        .expect("no loop");
+    graph
+        .set_stage(ids["planned"], Stage::Todo)
+        .expect("exists");
+    graph
+        .set_stage(ids["busy"], Stage::Doing)
+        .expect("available");
+    graph
+        .set_stage(ids["check"], Stage::Review)
+        .expect("available");
+    graph
+        .set_stage(ids["finished"], Stage::Done)
+        .expect("exists");
+    let board = graph.board();
+    assert_eq!(board.backlog_ready, [ids["ready"]]);
+    assert_eq!(board.backlog_locked, [ids["locked"]]);
+    assert_eq!(board.todo, [ids["planned"]]);
+    assert_eq!(board.doing, [ids["busy"]]);
+    assert_eq!(board.review, [ids["check"]]);
+    assert_eq!(board.done, [ids["finished"]]);
+}
+
+#[test]
+fn a_board_column_is_ordered_like_the_queue() {
+    let mut graph = Graph::new();
+    let area = graph.add_area(NewArea::new("a", "#fff"));
+    let low = graph
+        .add_node(NewNode::new("low", area).with_priority(1))
+        .expect("area exists");
+    let high = graph
+        .add_node(NewNode::new("high", area).with_priority(9))
+        .expect("area exists");
+    let dated = graph
+        .add_node(NewNode::new("dated", area).with_due(Some("2027-01-01".parse().expect("date"))))
+        .expect("area exists");
+    for id in [low, high, dated] {
+        graph.set_stage(id, Stage::Todo).expect("exists");
+    }
+    assert_eq!(graph.board().todo, [dated, high, low]);
+    // all three are available, so the queue holds the same tasks
+    assert_eq!(graph.board().todo, graph.queue());
+}
+
+#[test]
+fn stage_names_round_trip() {
+    for stage in Stage::ALL {
+        assert_eq!(Stage::from_name(stage.name()), Some(stage));
+    }
+    assert_eq!(Stage::from_name("DOING"), Some(Stage::Doing));
+    assert_eq!(Stage::from_name("closed"), None);
 }

@@ -5,7 +5,24 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use crate::date::Date;
 use crate::error::Error;
 use crate::id::{AreaId, NodeId};
-use crate::node::{Area, NewArea, NewNode, Node, Status};
+use crate::node::{Area, NewArea, NewNode, Node, Stage, Status};
+
+/// The board's columns, as [`Graph::board`] fills them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Board {
+    /// In the backlog and available: could be picked up now.
+    pub backlog_ready: Vec<NodeId>,
+    /// In the backlog and waiting on a prerequisite, or on a cycle.
+    pub backlog_locked: Vec<NodeId>,
+    /// Picked to be done next.
+    pub todo: Vec<NodeId>,
+    /// Being worked on.
+    pub doing: Vec<NodeId>,
+    /// Waiting to be checked.
+    pub review: Vec<NodeId>,
+    /// Finished.
+    pub done: Vec<NodeId>,
+}
 
 /// Marker for a node Tarjan's algorithm has not reached yet.
 const UNVISITED: usize = usize::MAX;
@@ -137,7 +154,7 @@ impl Graph {
                 note: draft.note,
                 area: draft.area,
                 priority: draft.priority,
-                done: false,
+                stage: Stage::Backlog,
                 due: draft.due,
                 prereqs: BTreeSet::new(),
             },
@@ -220,7 +237,39 @@ impl Graph {
     ///
     /// [`Error::NoSuchNode`] if there is no such node.
     pub fn set_done(&mut self, id: NodeId, done: bool) -> Result<(), Error> {
-        self.node_mut(id)?.done = done;
+        self.node_mut(id)?.stage = if done { Stage::Done } else { Stage::Backlog };
+        Ok(())
+    }
+
+    /// Moves a node to another stage of the board.
+    ///
+    /// The one move refused is starting a task, from backlog or todo into
+    /// doing or review, while something it needs is unfinished. That is the
+    /// dependency rule showing up on the board. Planning a locked task into
+    /// todo is allowed, and so is marking anything done, for the reasons
+    /// [`set_done`](Self::set_done) gives. A task already started stays where
+    /// it is if a prerequisite is reopened under it; it just shows as locked.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoSuchNode`], or [`Error::NotStartable`] for the refused move.
+    pub fn set_stage(&mut self, id: NodeId, stage: Stage) -> Result<(), Error> {
+        let current = self.node(id).ok_or(Error::NoSuchNode(id))?.stage;
+        if stage.is_started() && matches!(current, Stage::Backlog | Stage::Todo) {
+            let status = self.status(id).unwrap_or(Status::Locked);
+            if status != Status::Available {
+                return Err(Error::NotStartable { node: id, status });
+            }
+        }
+        self.node_mut(id)?.stage = stage;
+        Ok(())
+    }
+
+    /// Puts a node back in a stage it held, with no questions asked. Used only
+    /// by undo, which must be able to return a task to doing even if a
+    /// prerequisite has been reopened since.
+    pub(crate) fn restore_stage(&mut self, id: NodeId, stage: Stage) -> Result<(), Error> {
+        self.node_mut(id)?.stage = stage;
         Ok(())
     }
 
@@ -483,14 +532,14 @@ impl Graph {
         self.nodes
             .iter()
             .map(|(id, node)| {
-                let status = if node.done {
+                let status = if node.is_done() {
                     Status::Done
                 } else if !tiers.contains_key(id) {
                     Status::Cyclic
                 } else if node
                     .prereqs
                     .iter()
-                    .all(|p| self.nodes.get(p).is_none_or(|n| n.done))
+                    .all(|p| self.nodes.get(p).is_none_or(Node::is_done))
                 {
                     Status::Available
                 } else {
@@ -570,7 +619,14 @@ impl Graph {
             .map(|(id, _)| id)
             .collect();
 
-        out.sort_by(|a, b| {
+        self.most_urgent_first(&mut out, &due);
+        out
+    }
+
+    /// Sorts nodes the way the queue does: deadline first, then priority, then
+    /// name, then id.
+    fn most_urgent_first(&self, ids: &mut [NodeId], due: &BTreeMap<NodeId, Date>) {
+        ids.sort_by(|a, b| {
             let left = &self.nodes[a];
             let right = &self.nodes[b];
             match (due.get(a), due.get(b)) {
@@ -583,7 +639,44 @@ impl Graph {
             .then_with(|| left.name.cmp(&right.name))
             .then_with(|| a.cmp(b))
         });
-        out
+    }
+
+    /// Every node in the column of the board its stage puts it in, each
+    /// column ordered the way the queue is.
+    ///
+    /// The backlog is split in two, because the board must not hide the one
+    /// thing that sets this app apart: what could be picked up now, and what
+    /// is still waiting on something else. Cyclic tasks go with the locked
+    /// ones, since they cannot be started either.
+    #[must_use]
+    pub fn board(&self) -> Board {
+        let statuses = self.statuses();
+        let due = self.effective_due();
+        let mut board = Board::default();
+        for (id, node) in &self.nodes {
+            let column = match node.stage {
+                Stage::Backlog if statuses.get(id) == Some(&Status::Available) => {
+                    &mut board.backlog_ready
+                }
+                Stage::Backlog => &mut board.backlog_locked,
+                Stage::Todo => &mut board.todo,
+                Stage::Doing => &mut board.doing,
+                Stage::Review => &mut board.review,
+                Stage::Done => &mut board.done,
+            };
+            column.push(*id);
+        }
+        for column in [
+            &mut board.backlog_ready,
+            &mut board.backlog_locked,
+            &mut board.todo,
+            &mut board.doing,
+            &mut board.review,
+            &mut board.done,
+        ] {
+            self.most_urgent_first(column, &due);
+        }
+        board
     }
 
     /// Everything still to be done before `id` becomes available, in an order
@@ -619,7 +712,7 @@ impl Graph {
                 if !seen.insert(*prereq) {
                     continue;
                 }
-                if self.nodes.get(prereq).is_some_and(|n| !n.done) {
+                if self.nodes.get(prereq).is_some_and(|n| !n.is_done()) {
                     out.push(*prereq);
                     stack.push(*prereq);
                 }

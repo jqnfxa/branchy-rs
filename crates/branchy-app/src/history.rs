@@ -20,7 +20,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use branchy_core::{Area, AreaId, Command, Date, Node, NodeId};
+use branchy_core::{Area, AreaId, Command, Date, Node, NodeId, Stage};
 use serde::{Deserialize, Serialize};
 
 use crate::store::{NodeRecord, StoreError};
@@ -83,9 +83,18 @@ pub(crate) enum Op {
         node: NodeRecord,
         dependents: Vec<u64>,
     },
+    /// Written by 0.2.10, before the board. Read so its log still undoes.
     SetDone {
         node: u64,
         done: bool,
+    },
+    SetStage {
+        node: u64,
+        stage: String,
+    },
+    RestoreStage {
+        node: u64,
+        stage: String,
     },
     SetDue {
         node: u64,
@@ -123,6 +132,12 @@ fn ids(set: &BTreeSet<NodeId>) -> Vec<u64> {
 
 fn id_set(raw: &[u64]) -> BTreeSet<NodeId> {
     raw.iter().copied().map(NodeId::new).collect()
+}
+
+fn stage_named(word: &str) -> Result<Stage, StoreError> {
+    Stage::from_name(word).ok_or_else(|| {
+        StoreError::Unreadable(format!("the undo log holds an unknown stage \"{word}\""))
+    })
 }
 
 fn date(text: Option<String>) -> Result<Option<Date>, StoreError> {
@@ -178,9 +193,13 @@ impl Op {
                 node: NodeRecord::of(*id, node),
                 dependents: ids(dependents),
             },
-            Command::SetDone { node, done } => Self::SetDone {
+            Command::SetStage { node, stage } => Self::SetStage {
                 node: node.raw(),
-                done: *done,
+                stage: stage.name().to_string(),
+            },
+            Command::RestoreStage { node, stage } => Self::RestoreStage {
+                node: node.raw(),
+                stage: stage.name().to_string(),
             },
             Command::SetDue { node, due } => Self::SetDue {
                 node: node.raw(),
@@ -261,9 +280,17 @@ impl Op {
                     dependents: id_set(&dependents),
                 }
             }
-            Self::SetDone { node, done } => Command::SetDone {
+            Self::SetDone { node, done } => Command::RestoreStage {
                 node: NodeId::new(node),
-                done,
+                stage: if done { Stage::Done } else { Stage::Backlog },
+            },
+            Self::SetStage { node, stage } => Command::SetStage {
+                node: NodeId::new(node),
+                stage: stage_named(&stage)?,
+            },
+            Self::RestoreStage { node, stage } => Command::RestoreStage {
+                node: NodeId::new(node),
+                stage: stage_named(&stage)?,
             },
             Self::SetDue { node, due } => Command::SetDue {
                 node: NodeId::new(node),

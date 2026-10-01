@@ -11,11 +11,11 @@ use crate::date::Date;
 use crate::error::Error;
 use crate::graph::Graph;
 use crate::id::{AreaId, NodeId};
-use crate::node::{Area, NewArea, NewNode, Node};
+use crate::node::{Area, NewArea, NewNode, Node, Stage};
 
 /// One change to a graph.
 ///
-/// Most variants correspond to something a person can type. The two `Restore`
+/// Most variants correspond to something a person can type. The `Restore`
 /// variants do not: they are produced by [`Graph::apply`] as the inverse of a
 /// removal, and carry enough to put back exactly what was taken away.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,12 +84,23 @@ pub enum Command {
         dependents: BTreeSet<NodeId>,
     },
 
-    /// Mark a node done or not done.
-    SetDone {
+    /// Move a node to another stage of the board. Marking it done is moving
+    /// it to [`Stage::Done`].
+    SetStage {
         /// The node.
         node: NodeId,
-        /// The new value.
-        done: bool,
+        /// The stage to move it to.
+        stage: Stage,
+    },
+    /// Put a node back in a stage it held. Produced only as the inverse of a
+    /// stage change, and applied without the check that refuses starting a
+    /// locked task: undo has to be able to put a task back where it was even
+    /// if a prerequisite has been reopened since.
+    RestoreStage {
+        /// The node.
+        node: NodeId,
+        /// The stage it had.
+        stage: Stage,
     },
     /// Set or clear a node's deadline.
     SetDue {
@@ -282,13 +293,22 @@ impl Graph {
                 })
             }
 
-            Command::SetDone { node, done } => {
-                let was = self.require(node)?.done;
-                self.set_done(node, done)?;
+            Command::SetStage { node, stage } => {
+                let was = self.require(node)?.stage;
+                self.set_stage(node, stage)?;
                 Ok(Applied {
                     node: Some(node),
                     area: None,
-                    undo: vec![Command::SetDone { node, done: was }],
+                    undo: vec![Command::RestoreStage { node, stage: was }],
+                })
+            }
+            Command::RestoreStage { node, stage } => {
+                let was = self.require(node)?.stage;
+                self.restore_stage(node, stage)?;
+                Ok(Applied {
+                    node: Some(node),
+                    area: None,
+                    undo: vec![Command::RestoreStage { node, stage: was }],
                 })
             }
 

@@ -8,6 +8,8 @@
 //! add <name> [in <area>] [after a, b] [before c] [pri n] [note "..."] [due YYYY-MM-DD]
 //! due <task> <YYYY-MM-DD | none>
 //! done <task>            undone <task>
+//! todo <task>            start <task>            review <task>
+//! stage <task> <backlog | todo | doing | review | done>
 //! link <a> after <b>     link <a> before <b>     unlink <a> after <b>
 //! rm <task>              pri <task> <n>          rename <task> <name>
 //! note <task> <text>     move <task> in <area>
@@ -33,6 +35,7 @@ use crate::command::Command;
 use crate::date::Date;
 use crate::graph::Graph;
 use crate::id::{AreaId, NodeId};
+use crate::node::Stage;
 
 /// Why a line could not be turned into a command.
 ///
@@ -54,6 +57,8 @@ pub enum ParseError {
     BadPriority(String),
     /// A deadline was expected and the word was not a date.
     BadDate(String),
+    /// A stage was expected and the word is not one.
+    BadStage(String),
     /// Nothing matched this task reference.
     NoSuchTask(String),
     /// Several tasks matched this reference.
@@ -88,6 +93,10 @@ impl std::fmt::Display for ParseError {
             Self::BadDate(word) => {
                 write!(f, "{word} is not a date, expected YYYY-MM-DD or none")
             }
+            Self::BadStage(word) => write!(
+                f,
+                "{word} is not a stage, expected backlog, todo, doing, review or done"
+            ),
             Self::NoSuchTask(query) => write!(f, "no task matches {query}"),
             Self::AmbiguousTask { query, matches } => {
                 write!(f, "{query} matches {} tasks", matches.len())
@@ -360,14 +369,13 @@ fn parse_tokens(scope: &Scope<'_>, tokens: &[String]) -> Result<Command, ParseEr
 
     match verb.to_ascii_lowercase().as_str() {
         "add" => parse_add(scope, rest),
-        "done" => Ok(Command::SetDone {
-            node: scope.node(&join(rest))?,
-            done: true,
-        }),
-        "undone" => Ok(Command::SetDone {
-            node: scope.node(&join(rest))?,
-            done: false,
-        }),
+        // `undone` predates the board: not done, and not picked either
+        "done" => to_stage(scope, rest, Stage::Done),
+        "undone" => to_stage(scope, rest, Stage::Backlog),
+        "todo" => to_stage(scope, rest, Stage::Todo),
+        "start" => to_stage(scope, rest, Stage::Doing),
+        "review" => to_stage(scope, rest, Stage::Review),
+        "stage" => parse_stage(scope, rest),
         "rm" | "del" | "delete" => Ok(Command::RemoveNode(scope.node(&join(rest))?)),
         "pri" | "priority" => parse_priority(scope, rest),
         "due" => parse_due(scope, rest),
@@ -415,6 +423,26 @@ fn join(tokens: &[String]) -> String {
 fn parse_two_part(tokens: &[String]) -> Option<(String, String)> {
     let (first, rest) = tokens.split_first()?;
     Some((first.clone(), join(rest)))
+}
+
+fn to_stage(scope: &Scope<'_>, tokens: &[String], stage: Stage) -> Result<Command, ParseError> {
+    Ok(Command::SetStage {
+        node: scope.node(&join(tokens))?,
+        stage,
+    })
+}
+
+/// `stage <task> doing`: the stage is the last word, so the task needs no
+/// quotes.
+fn parse_stage(scope: &Scope<'_>, tokens: &[String]) -> Result<Command, ParseError> {
+    let Some((last, head)) = tokens.split_last() else {
+        return Err(ParseError::MissingTask);
+    };
+    if head.is_empty() {
+        return Err(ParseError::MissingTask);
+    }
+    let stage = Stage::from_name(last).ok_or_else(|| ParseError::BadStage(last.clone()))?;
+    to_stage(scope, head, stage)
 }
 
 fn parse_priority(scope: &Scope<'_>, tokens: &[String]) -> Result<Command, ParseError> {

@@ -467,12 +467,12 @@ fn load(path: &Path) -> Result<Graph, String> {
 }
 
 fn tally(graph: &Graph) -> String {
-    let done = graph.nodes().filter(|(_, n)| n.done).count();
+    let done = graph.nodes().filter(|(_, n)| n.is_done()).count();
     let now = branchy_app::today();
     let overdue = graph
         .effective_due()
         .iter()
-        .filter(|(id, date)| **date < now && graph.node(**id).is_some_and(|node| !node.done))
+        .filter(|(id, date)| **date < now && graph.node(**id).is_some_and(|node| !node.is_done()))
         .count();
     let mut line = format!(
         "{done}/{} done, {} available",

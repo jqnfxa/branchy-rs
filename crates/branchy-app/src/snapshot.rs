@@ -9,7 +9,7 @@
 //! snapshot` prints the same thing, which is what makes the frontend
 //! developable, and the app scriptable, without a running window.
 
-use branchy_core::{Graph, NodeId, Status};
+use branchy_core::{Board, Graph, NodeId, Status};
 
 use crate::today::{Urgency, today};
 use serde::Serialize;
@@ -25,6 +25,8 @@ pub struct Snapshot {
     pub queue: Vec<String>,
     /// Groups of mutually blocking tasks. Empty on a healthy graph.
     pub cycles: Vec<Vec<String>>,
+    /// The board's columns, each most urgent first.
+    pub board: BoardView,
     /// Counts for the top bar.
     pub tally: Tally,
     /// The day this snapshot was taken, so the interface agrees with the
@@ -60,8 +62,10 @@ pub struct NodeView {
     pub area: String,
     /// Higher sorts earlier in the queue.
     pub priority: u8,
-    /// Whether it is finished.
+    /// Whether it is finished: its stage is `done`.
     pub done: bool,
+    /// `backlog`, `todo`, `doing`, `review` or `done`.
+    pub stage: &'static str,
     /// What it needs.
     pub prereqs: Vec<String>,
     /// What needs it.
@@ -78,6 +82,39 @@ pub struct NodeView {
     pub days_left: Option<i64>,
     /// `overdue`, `today`, `soon` or `later`. Absent when there is no deadline.
     pub urgency: Option<&'static str>,
+}
+
+/// The board's columns, by id, each ordered the way the queue is. Which
+/// column a task is in, and in what order, is worked out by the graph rather
+/// than by the interface.
+#[derive(Debug, Serialize)]
+pub struct BoardView {
+    /// In the backlog and available now.
+    pub backlog_ready: Vec<String>,
+    /// In the backlog and waiting on a prerequisite or a cycle.
+    pub backlog_locked: Vec<String>,
+    /// Picked to be done next.
+    pub todo: Vec<String>,
+    /// Being worked on.
+    pub doing: Vec<String>,
+    /// Waiting to be checked.
+    pub review: Vec<String>,
+    /// Finished.
+    pub done: Vec<String>,
+}
+
+impl BoardView {
+    fn of(board: Board) -> Self {
+        let keys = |ids: Vec<NodeId>| ids.into_iter().map(key).collect();
+        Self {
+            backlog_ready: keys(board.backlog_ready),
+            backlog_locked: keys(board.backlog_locked),
+            todo: keys(board.todo),
+            doing: keys(board.doing),
+            review: keys(board.review),
+            done: keys(board.done),
+        }
+    }
 }
 
 /// Counts for the top bar.
@@ -112,7 +149,7 @@ impl Snapshot {
                 let held: Vec<bool> = graph
                     .nodes()
                     .filter(|(_, node)| node.area == area_id)
-                    .map(|(_, node)| node.done)
+                    .map(|(_, node)| node.is_done())
                     .collect();
                 AreaView {
                     id: area_id.to_string(),
@@ -132,7 +169,8 @@ impl Snapshot {
                 note: node.note.clone(),
                 area: node.area.to_string(),
                 priority: node.priority,
-                done: node.done,
+                done: node.is_done(),
+                stage: node.stage.name(),
                 prereqs: node.prereqs.iter().copied().map(key).collect(),
                 dependents: graph.dependents(id).into_iter().map(key).collect(),
                 status: match statuses.get(&id) {
@@ -169,6 +207,7 @@ impl Snapshot {
             },
             areas,
             queue,
+            board: BoardView::of(graph.board()),
             cycles: graph
                 .find_cycles()
                 .into_iter()
