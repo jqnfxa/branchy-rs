@@ -61,6 +61,9 @@ Rows: id status stage pri area tier due needs name
   needs   prerequisite ids, comma-separated, or -
 A line starting with # is a legend (a0 and its name) or a count.
 
+Several agents may write at once: each change waits its turn and none is
+lost.
+
 Many changes: one call, all or nothing, one undo step. $x = names what a
 line creates; later lines use $x where a task or direction goes.
 $ branchy --plain run - <<'EOF'
