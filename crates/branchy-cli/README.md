@@ -20,23 +20,39 @@ branchy done school
 
 ```console
 $ branchy queue
-2 available:
-  1. Calculus                                p6   Hard skills    in 5 months   unlocks 1
+1 available:
+  1. n1     Calculus                               p6   Hard skills    in 5 months   unlocks 1
 
 $ branchy why "Probability theory"
 Probability theory is locked. 1 task(s) stand in the way:
-  1. Calculus                                p6   Hard skills
+  1. n1     Calculus                               p6   Hard skills
 ```
 
 ## Commands
 
 `add` · `done` · `undone` · `rm` · `pri` · `due` · `rename` · `note` · `move` · `link` · `unlink` · `area` · `rename-area` · `recolor-area` · `rmarea` · `run`
 
-`queue` · `list` · `tree` · `why` · `show` · `calendar` · `cycles` · `snapshot` · `undo` · `where`
+`brief` · `queue` · `list` · `tree` · `why` · `show` · `calendar` · `cycles` · `snapshot` · `undo` · `where` · `guide`
 
 `vault list` · `vault new` · `vault open` · `vault forget`
 
-`after` and `needs` both mean "blocked by"; `before` and `blocks` say the same edge from the other end. Tasks are named by any unambiguous part of their name.
+`after` and `needs` both mean "blocked by"; `before` and `blocks` say the same edge from the other end. Tasks are named by id (`n12`) or by any unambiguous part of their name; an ambiguous one is refused with the candidates listed.
+
+## For scripts and agents
+
+`branchy guide` prints one page on driving Branchy from a program. In short:
+
+- `--plain` prints one tab-separated line per task, with whole names and other tasks and directions referred to by id. A change prints the row it changed.
+- `brief` is where things stand in one screen. `--limit` on `queue`, `list` and `calendar` keeps the first few.
+- `branchy run -` reads many command lines from stdin and applies them as one change: all or nothing, one undo step. A line may begin with `$x =` to name what it creates, and later lines refer to it as `$x`.
+
+```console
+$ branchy --plain queue
+# 1 available
+# a0	Hard skills
+# id	status	pri	area	tier	due	needs	name
+n1	available	6	a0	1	2027-03-01	n0	Calculus
+```
 
 ## Vaults
 

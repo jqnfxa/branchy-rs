@@ -49,6 +49,7 @@ cargo run --bin branchy -- done school
 
 cargo run --bin branchy -- due "Probability theory" 2027-03-01
 
+cargo run --bin branchy -- brief                     # where things stand
 cargo run --bin branchy -- queue                     # what is available now
 cargo run --bin branchy -- why "Probability theory"  # what stands in the way
 cargo run --bin branchy -- calendar                  # what is due, and when
@@ -56,7 +57,9 @@ cargo run --bin branchy -- tree                      # the whole graph
 cargo run --bin branchy -- undo                      # take the last change back
 ```
 
-`after` and `needs` both mean "blocked by"; `before` and `blocks` say the same edge from the other end. Tasks are named by any unambiguous part of their name.
+`after` and `needs` both mean "blocked by"; `before` and `blocks` say the same edge from the other end. Tasks are named by id (`n12`) or by any unambiguous part of their name.
+
+**For scripts and AI agents**, `branchy guide` prints one page on driving it: `--plain` output with one line per task and ids instead of names, `brief` to get oriented in one call, `--limit`, and `branchy run -` to apply a whole batch of commands from stdin as one change. It is built to be cheap in tokens: an agent can orient itself in a 900-task graph in about 1.3 KB.
 
 A **vault** is a folder holding one graph, as in Obsidian, so separate jobs get separate graphs. `branchy vault` lists the recent ones, and `vault new`, `vault open` and `vault forget` do what they say. The window and the terminal share that list, so both always work in the same vault. `branchy where` prints the document's location.
 
